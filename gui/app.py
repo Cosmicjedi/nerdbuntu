@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Nerdbuntu GUI Application
+Nerdbuntu GUI Application  
 Intelligent PDF to Markdown converter with semantic backlinking for RAG
 """
 
@@ -23,8 +23,6 @@ except ImportError:
     print("Error: python-dotenv package is not installed.")
     print("Please install required packages by running:")
     print("  pip install -r requirements.txt")
-    print("Or install dotenv specifically:")
-    print("  pip install python-dotenv")
     sys.exit(1)
 
 # Import core modules
@@ -41,10 +39,7 @@ try:
 except ImportError as e:
     print(f"Error importing MarkItDown: {e}")
     print("\nMarkItDown is not installed. Please install it:")
-    print("  pip install markitdown")
-    print("\nOr install all dependencies:")
-    print("  pip install -r requirements.txt")
-    print("\nNote: Make sure you're in your virtual environment if using one")
+    print("  pip install markitdown[all]")
     sys.exit(1)
 
 # Import Azure and other dependencies
@@ -55,9 +50,7 @@ try:
     from sentence_transformers import SentenceTransformer
 except ImportError as e:
     print(f"Error importing required packages: {e}")
-    print("Please run setup.sh first to install dependencies")
-    print("Or install manually:")
-    print("  pip install -r requirements.txt")
+    print("Please install all dependencies: pip install -r requirements.txt")
     sys.exit(1)
 
 
@@ -69,17 +62,14 @@ class NerdbuntuApp:
         self.root.title("Nerdbuntu - Intelligent PDF to Markdown Converter")
         self.root.geometry("900x700")
         
+        # Set up cleanup on window close
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
         # Check Azure configuration
         self.azure_endpoint = os.getenv("AZURE_ENDPOINT")
         self.azure_api_key = os.getenv("AZURE_API_KEY")
         
         if not self.azure_endpoint or not self.azure_api_key:
-            messagebox.showwarning(
-                "Configuration Warning",
-                "Azure credentials not found in .env file.\n\n"
-                "Semantic features will be disabled.\n"
-                "To enable them, copy .env.template to .env and add your credentials."
-            )
             self.azure_configured = False
         else:
             self.azure_configured = True
@@ -99,12 +89,9 @@ class NerdbuntuApp:
         if self.azure_configured:
             try:
                 self.semantic_linker = SemanticLinker(self.azure_endpoint, self.azure_api_key)
+                # Set progress callback
+                self.semantic_linker.set_progress_callback(self.log)
             except Exception as e:
-                messagebox.showwarning(
-                    "Azure Initialization Warning",
-                    f"Failed to initialize semantic linker: {e}\n\n"
-                    "Semantic features will be disabled."
-                )
                 self.azure_configured = False
                 self.semantic_linker = None
         else:
@@ -124,14 +111,15 @@ class NerdbuntuApp:
             try:
                 self.semantic_linker.initialize_vector_db(str(self.vector_db_path))
             except Exception as e:
-                messagebox.showwarning(
-                    "Vector DB Warning",
-                    f"Failed to initialize vector database: {e}\n\n"
-                    "Semantic features will be disabled."
-                )
                 self.azure_configured = False
         
         self.setup_ui()
+    
+    def on_closing(self):
+        """Handle window close event"""
+        # Forcefully exit to kill all background threads
+        self.root.destroy()
+        os._exit(0)
     
     def setup_ui(self):
         """Setup the user interface"""
@@ -144,7 +132,7 @@ class NerdbuntuApp:
         title_label.pack(pady=10)
         
         # Configuration status
-        status_text = "Azure AI: " + ("✓ Configured" if self.azure_configured else "✗ Not Configured")
+        status_text = "Azure AI: " + ("✓ Configured" if self.azure_configured else "✗ Not Configured (Basic Mode)")
         status_color = "green" if self.azure_configured else "orange"
         config_label = tk.Label(
             self.root,
@@ -178,7 +166,7 @@ class NerdbuntuApp:
         self.enable_semantic = tk.BooleanVar(value=self.azure_configured)
         semantic_checkbox = tk.Checkbutton(
             options_frame,
-            text="Enable Semantic Backlinking (uses Azure AI)",
+            text="Enable Semantic Backlinking (uses Azure AI - slower but adds AI features)",
             variable=self.enable_semantic,
             state="normal" if self.azure_configured else "disabled"
         )
@@ -196,7 +184,7 @@ class NerdbuntuApp:
         if not self.azure_configured:
             tk.Label(
                 options_frame,
-                text="⚠ Azure features disabled - configure .env to enable",
+                text="⚠ Azure features disabled - run ./configure_azure.sh to enable",
                 fg="orange",
                 font=("Arial", 9, "italic")
             ).pack(anchor="w", pady=5)
@@ -254,10 +242,14 @@ class NerdbuntuApp:
             self.output_dir = Path(directory)
     
     def log(self, message):
-        """Add message to log"""
-        self.log_text.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] {message}\n")
-        self.log_text.see(tk.END)
-        self.root.update()
+        """Add message to log - thread-safe"""
+        def _log():
+            self.log_text.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] {message}\n")
+            self.log_text.see(tk.END)
+            self.root.update_idletasks()
+        
+        # Schedule the update in the main thread
+        self.root.after(0, _log)
     
     def process_file(self):
         """Process the PDF file"""
@@ -273,8 +265,7 @@ class NerdbuntuApp:
             return
         
         # Run processing in a separate thread
-        thread = threading.Thread(target=self._process_file_thread)
-        thread.daemon = True
+        thread = threading.Thread(target=self._process_file_thread, daemon=True)
         thread.start()
     
     def _process_file_thread(self):
@@ -295,13 +286,12 @@ class NerdbuntuApp:
             
             # Apply semantic processing if enabled and available
             if self.enable_semantic.get() and self.azure_configured and self.semantic_linker:
-                self.log("Applying semantic backlinking...")
+                self.log("⏳ Starting semantic processing (this may take a minute)...")
                 try:
                     markdown_text = self.semantic_linker.add_semantic_links(
                         markdown_text,
                         Path(self.input_file).name
                     )
-                    self.log("Semantic backlinking complete")
                 except Exception as e:
                     self.log(f"⚠ Semantic processing failed: {e}")
                     self.log("Continuing with basic conversion...")
