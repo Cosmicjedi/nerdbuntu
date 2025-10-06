@@ -53,14 +53,13 @@ def check_login():
         if result.returncode == 0:
             account_info = json.loads(result.stdout)
             print_success(f"Logged in as: {account_info['user']['name']}")
-            print_info(f"Subscription: {account_info['name']}")
-            return True
+            return account_info
         else:
             print_error("Not logged into Azure CLI")
-            return False
+            return None
     except Exception as e:
         print_error(f"Error checking login status: {e}")
-        return False
+        return None
 
 def login_to_azure():
     """Log into Azure"""
@@ -77,6 +76,70 @@ def login_to_azure():
     except Exception as e:
         print_error(f"Error during login: {e}")
         return False
+
+def list_subscriptions():
+    """List all available Azure subscriptions"""
+    try:
+        result = subprocess.run(
+            ['az', 'account', 'list', '-o', 'json'],
+            capture_output=True,
+            text=True
+        )
+        
+        if result.returncode == 0:
+            subscriptions = json.loads(result.stdout)
+            return subscriptions
+        else:
+            print_error("Failed to list subscriptions")
+            return []
+    except Exception as e:
+        print_error(f"Error listing subscriptions: {e}")
+        return []
+
+def select_subscription(subscriptions):
+    """Let user select a subscription"""
+    if not subscriptions:
+        print_error("No subscriptions found")
+        return None
+    
+    if len(subscriptions) == 1:
+        sub = subscriptions[0]
+        print_info(f"Using subscription: {sub['name']}")
+        return sub
+    
+    print("\nAvailable Azure Subscriptions:")
+    for i, sub in enumerate(subscriptions, 1):
+        state = sub.get('state', 'Unknown')
+        is_default = " (current)" if sub.get('isDefault') else ""
+        print(f"\n{i}. {sub['name']}{is_default}")
+        print(f"   ID: {sub['id']}")
+        print(f"   State: {state}")
+    
+    while True:
+        try:
+            choice = input(f"\nSelect subscription (1-{len(subscriptions)}): ").strip()
+            idx = int(choice) - 1
+            if 0 <= idx < len(subscriptions):
+                selected = subscriptions[idx]
+                # Set the selected subscription as active
+                result = subprocess.run(
+                    ['az', 'account', 'set', '--subscription', selected['id']],
+                    capture_output=True,
+                    text=True
+                )
+                if result.returncode == 0:
+                    print_success(f"Switched to subscription: {selected['name']}")
+                    return selected
+                else:
+                    print_error("Failed to switch subscription")
+                    return None
+            else:
+                print_error(f"Please enter a number between 1 and {len(subscriptions)}")
+        except ValueError:
+            print_error("Please enter a valid number")
+        except KeyboardInterrupt:
+            print("\n\nCancelled by user")
+            sys.exit(0)
 
 def find_openai_resources():
     """Find all Azure OpenAI resources in the subscription"""
@@ -95,7 +158,7 @@ def find_openai_resources():
                 print_success(f"Found {len(resources)} Azure OpenAI resource(s)")
                 return resources
             else:
-                print_warning("No Azure OpenAI resources found in your subscription")
+                print_warning("No Azure OpenAI resources found in this subscription")
                 return []
         else:
             print_error("Failed to list Azure OpenAI resources")
@@ -246,9 +309,10 @@ def main():
     
     print("This script will:")
     print("  1. Connect to your Azure account")
-    print("  2. Find your Azure OpenAI resources")
-    print("  3. Discover your model deployments")
-    print("  4. Generate the correct .env configuration")
+    print("  2. Let you select a subscription")
+    print("  3. Find your Azure OpenAI resources")
+    print("  4. Discover your model deployments")
+    print("  5. Generate the correct .env configuration")
     print()
     
     # Check Azure CLI
@@ -259,17 +323,32 @@ def main():
     
     # Check login status
     print_header("Step 2: Checking Azure Login")
-    if not check_login():
+    account_info = check_login()
+    if not account_info:
         print_info("You need to log into Azure")
         if not login_to_azure():
             sys.exit(1)
+        # Re-check after login
+        account_info = check_login()
+    
+    # List and select subscription
+    print_header("Step 3: Selecting Azure Subscription")
+    subscriptions = list_subscriptions()
+    
+    if not subscriptions:
+        print_error("No subscriptions found")
+        sys.exit(1)
+    
+    selected_subscription = select_subscription(subscriptions)
+    if not selected_subscription:
+        sys.exit(1)
     
     # Find OpenAI resources
-    print_header("Step 3: Finding Azure OpenAI Resources")
+    print_header("Step 4: Finding Azure OpenAI Resources")
     resources = find_openai_resources()
     
     if not resources:
-        print_error("\nNo Azure OpenAI resources found!")
+        print_error("\nNo Azure OpenAI resources found in this subscription!")
         print_info("Please create an Azure OpenAI resource first:")
         print_info("  1. Go to https://portal.azure.com")
         print_info("  2. Create a new Azure OpenAI resource")
@@ -277,7 +356,7 @@ def main():
         sys.exit(1)
     
     # Select resource
-    print_header("Step 4: Selecting Resource")
+    print_header("Step 5: Selecting Resource")
     selected_resource = select_resource(resources)
     
     resource_name = selected_resource['name']
@@ -289,7 +368,7 @@ def main():
     print_success(f"Endpoint: {endpoint}")
     
     # Get API key
-    print_header("Step 5: Retrieving API Key")
+    print_header("Step 6: Retrieving API Key")
     api_key = get_resource_keys(resource_group, resource_name)
     
     if not api_key:
@@ -301,7 +380,7 @@ def main():
     print_info(f"Key: {api_key[:8]}...{api_key[-4:]}")
     
     # Get deployments
-    print_header("Step 6: Finding Model Deployments")
+    print_header("Step 7: Finding Model Deployments")
     deployments = get_deployments(resource_group, resource_name)
     
     if not deployments:
@@ -315,7 +394,7 @@ def main():
         sys.exit(1)
     
     # Select deployment
-    print_header("Step 7: Selecting Deployment")
+    print_header("Step 8: Selecting Deployment")
     selected_deployment = select_deployment(deployments)
     
     if not selected_deployment:
@@ -325,11 +404,12 @@ def main():
     print_success(f"Selected deployment: {deployment_name}")
     
     # Save configuration
-    print_header("Step 8: Saving Configuration")
+    print_header("Step 9: Saving Configuration")
     print("\nConfiguration Summary:")
-    print(f"  Endpoint:    {endpoint}")
-    print(f"  API Key:     {api_key[:8]}...{api_key[-4:]}")
-    print(f"  Deployment:  {deployment_name}")
+    print(f"  Subscription: {selected_subscription['name']}")
+    print(f"  Endpoint:     {endpoint}")
+    print(f"  API Key:      {api_key[:8]}...{api_key[-4:]}")
+    print(f"  Deployment:   {deployment_name}")
     print()
     
     if save_env_file(endpoint, api_key, deployment_name):
