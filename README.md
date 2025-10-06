@@ -14,7 +14,7 @@ Nerdbuntu is an Ubuntu-based solution that uses MarkItDown with Azure AI to inte
 - 📦 **Automated Setup**: One-script installation with your Azure credentials
 - 🔍 **Key Concept Extraction**: AI-powered concept identification
 - 📊 **RAG-Ready Output**: Optimized for retrieval augmented generation
-- 🚀 **Export/Import**: Bundle and transport RAG data between machines
+- 💾 **Backup & Restore**: Complete data backup and restoration system
 
 ## Prerequisites 📋
 
@@ -116,56 +116,85 @@ This document is semantically linked in the vector database.
 - **Total Chunks**: 15
 ```
 
-## Exporting and Importing RAG Data 📦
+## Backup and Restore 💾
 
-### Exporting Your Data
+### Creating a Backup
 
-If you're processing PDFs on one machine but will use the RAG data on another machine, use the export script:
+Backup all your processed markdown files and ChromaDB database:
 
 ```bash
 cd ~/nerdbuntu
-chmod +x export.sh
-./export.sh
+chmod +x backup_restore.sh
+./backup_restore.sh backup
 ```
 
-This creates a ZIP archive containing:
+**What gets backed up:**
 - ✅ All processed markdown files
 - ✅ Complete ChromaDB vector database
-- ✅ Metadata and import instructions
-- ✅ Integration examples
+- ✅ Backup metadata and restore instructions
 
-The export is saved to `~/nerdbuntu/exports/nerdbuntu_rag_export_TIMESTAMP.zip`
+**Backup location:** `~/nerdbuntu/exports/nerdbuntu_backup_TIMESTAMP.zip`
 
-### Importing on Destination Machine
+### Restoring from Backup
 
-On your destination machine (where you'll use the RAG data):
+Restore your data from a backup archive:
 
 ```bash
-# Option 1: If you have Nerdbuntu installed
-chmod +x import.sh
-./import.sh ~/path/to/nerdbuntu_rag_export_*.zip
-
-# Option 2: Manual extraction
-unzip nerdbuntu_rag_export_*.zip
-cd nerdbuntu_rag_export_*
-# Follow instructions in IMPORT_README.md
+./backup_restore.sh restore ~/nerdbuntu/exports/nerdbuntu_backup_*.zip
 ```
 
-The import script offers two modes:
-- **Merge**: Add to existing data (recommended)
-- **Replace**: Clear existing data and import fresh
+**Restore modes:**
+1. **Merge** (Recommended)
+   - Adds backup data to existing data
+   - Safe - won't delete anything
+   - Perfect for combining multiple backups
 
-### Transport Methods
+2. **Replace** (Careful!)
+   - Deletes ALL existing data first
+   - Then restores backup data
+   - Use for clean restoration
+   - Requires typing "DELETE" to confirm
 
+### Common Backup/Restore Scenarios
+
+**Regular backups:**
 ```bash
-# Via SCP
-scp ~/nerdbuntu/exports/nerdbuntu_rag_export_*.zip user@destination:/path/
+# Create daily backups
+./backup_restore.sh backup
 
-# Via cloud storage
-aws s3 cp ~/nerdbuntu/exports/nerdbuntu_rag_export_*.zip s3://bucket/
+# Backups are timestamped automatically
+# nerdbuntu_backup_20251006_120000.zip
+```
 
-# Via USB/external drive
-cp ~/nerdbuntu/exports/nerdbuntu_rag_export_*.zip /media/usb/
+**Moving to another machine:**
+```bash
+# Machine 1: Create backup
+./backup_restore.sh backup
+
+# Transfer the file
+scp ~/nerdbuntu/exports/nerdbuntu_backup_*.zip user@machine2:~/
+
+# Machine 2: Restore
+./backup_restore.sh restore ~/nerdbuntu_backup_*.zip
+```
+
+**Combining multiple backups:**
+```bash
+# Restore first backup (merge mode)
+./backup_restore.sh restore backup1.zip
+
+# Restore second backup (merge mode)
+./backup_restore.sh restore backup2.zip
+
+# All data now combined!
+```
+
+**Disaster recovery:**
+```bash
+# Restore from backup (replace mode)
+./backup_restore.sh restore ~/safe-location/backup.zip
+# Choose option 2 (Replace)
+# Type "DELETE" to confirm
 ```
 
 ## Advanced Usage 🎓
@@ -254,13 +283,12 @@ nano ~/nerdbuntu/.env
 ~/nerdbuntu/
 ├── app.py                    # Main application
 ├── setup.sh                  # Setup script
-├── export.sh                 # Export RAG data
-├── import.sh                 # Import RAG data
+├── backup_restore.sh         # Backup and restore script
 ├── examples.py               # Advanced usage examples
 ├── requirements.txt          # Python dependencies
 ├── .env                      # Configuration (created by setup)
 ├── venv/                     # Python virtual environment
-├── exports/                  # Export archives
+├── exports/                  # Backup archives
 └── data/
     ├── input/               # Place PDFs here (optional)
     ├── output/              # Processed markdown files
@@ -282,7 +310,10 @@ cat ~/nerdbuntu/.env
 
 **Issue**: ChromaDB errors
 ```bash
-# Solution: Clear and reinitialize
+# Solution: Restore from a backup
+./backup_restore.sh restore ~/nerdbuntu/exports/latest_backup.zip
+
+# Or clear and reinitialize
 rm -rf ~/nerdbuntu/data/vector_db/*
 python app.py  # Will reinitialize
 ```
@@ -305,6 +336,17 @@ sudo apt-get install python3-tk
 - Check your API key is valid
 - Ensure your deployment name matches your Azure resource
 - Verify you have quota/credits available in Azure
+
+**Issue**: Restore not working
+```bash
+# Verify backup file integrity
+unzip -t backup.zip
+
+# Try manual restore
+unzip backup.zip
+cp -r nerdbuntu_backup_*/markdown/* ~/nerdbuntu/data/output/
+cp -r nerdbuntu_backup_*/vector_db/* ~/nerdbuntu/data/vector_db/
+```
 
 ## RAG Integration 🤖
 
@@ -384,6 +426,7 @@ MIT License - see [LICENSE](LICENSE) file for details
 ## Roadmap 🗺️
 
 - [x] Export/Import functionality
+- [x] Backup and restore system
 - [ ] Batch processing UI
 - [ ] Web interface (Flask/FastAPI)
 - [ ] Additional file formats (DOCX, PPTX)
