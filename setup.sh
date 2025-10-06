@@ -77,11 +77,23 @@ echo ""
 # Prompt for Azure endpoint
 read -p "Azure AI Endpoint (e.g., https://your-service.openai.azure.com/): " AZURE_ENDPOINT
 
-# Validate endpoint format
+# Auto-add https:// if missing
+if [[ ! "$AZURE_ENDPOINT" =~ ^https:// ]] && [[ ! "$AZURE_ENDPOINT" =~ ^http:// ]]; then
+    echo -e "${YELLOW}Note: Adding https:// prefix to endpoint${NC}"
+    AZURE_ENDPOINT="https://${AZURE_ENDPOINT}"
+fi
+
+# Validate it's now https (not http)
 while [[ ! "$AZURE_ENDPOINT" =~ ^https:// ]]; do
-    echo -e "${RED}Error: Endpoint must start with https://${NC}"
+    echo -e "${RED}Error: Endpoint must use https:// (not http://)${NC}"
     read -p "Azure AI Endpoint: " AZURE_ENDPOINT
+    # Auto-add https:// if missing
+    if [[ ! "$AZURE_ENDPOINT" =~ ^https:// ]] && [[ ! "$AZURE_ENDPOINT" =~ ^http:// ]]; then
+        AZURE_ENDPOINT="https://${AZURE_ENDPOINT}"
+    fi
 done
+
+echo -e "${GREEN}Using endpoint: $AZURE_ENDPOINT${NC}"
 
 # Prompt for Azure API key
 read -sp "Azure API Key: " AZURE_API_KEY
