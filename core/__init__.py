@@ -1,0 +1,3 @@
+"""
+Nerdbuntu Core Package
+"""
