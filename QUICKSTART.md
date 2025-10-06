@@ -1,5 +1,17 @@
 # Quick Start Guide
 
+## Prerequisites
+
+Before you begin, make sure you have:
+- Azure AI credentials (API endpoint and key)
+- Ubuntu 20.04+ or Debian-based Linux distribution
+
+**Getting Azure Credentials:**
+1. Go to [Azure Portal](https://portal.azure.com)
+2. Navigate to your Azure AI Service or OpenAI resource
+3. Copy the **Endpoint** (e.g., `https://your-service.openai.azure.com/`)
+4. Copy one of the **Keys** from the "Keys and Endpoint" section
+
 ## Installation (5 minutes)
 
 ### Step 1: Clone Repository
@@ -16,14 +28,23 @@ chmod +x setup.sh
 
 **What happens during setup:**
 1. ✅ System packages updated
-2. ✅ Azure CLI installed
-3. ✅ Python virtual environment created
-4. ✅ Python packages installed (MarkItDown, Azure AI, ChromaDB, etc.)
-5. ✅ Azure authentication (browser opens)
-6. ✅ Azure AI Services created automatically
-7. ✅ Configuration file (.env) generated
+2. ✅ Python virtual environment created
+3. ✅ Python packages installed (MarkItDown, Azure AI, ChromaDB, etc.)
+4. ✅ **You'll be prompted for your Azure credentials:**
+   - Azure AI Endpoint
+   - Azure API Key
+   - Deployment Name (default: gpt-4o)
+5. ✅ Configuration file (.env) generated
+6. ✅ Project files downloaded
 
 **Time:** ~5-10 minutes (depending on internet speed)
+
+**Setup prompts will look like:**
+```
+Azure AI Endpoint (e.g., https://your-service.openai.azure.com/): 
+Azure API Key: ****
+Azure Deployment Name [default: gpt-4o]: 
+```
 
 ### Step 3: Activate Environment
 ```bash
@@ -111,9 +132,16 @@ results = linker.find_similar_chunks("your query", n_results=5)
 ## Troubleshooting
 
 ### "Azure credentials not found"
+Make sure you entered your credentials correctly during setup. You can manually edit the `.env` file:
 ```bash
-az login
-./setup.sh
+nano ~/nerdbuntu/.env
+```
+
+Update these values:
+```
+AZURE_ENDPOINT=https://your-service.openai.azure.com/
+AZURE_API_KEY=your-actual-api-key
+AZURE_DEPLOYMENT_NAME=gpt-4o
 ```
 
 ### "Module not found"
@@ -127,15 +155,32 @@ pip install -r requirements.txt
 sudo apt-get install python3-tk
 ```
 
+### Re-run Setup
+If you need to reconfigure:
+```bash
+cd nerdbuntu
+./setup.sh
+```
+It will ask for your Azure credentials again.
+
+## Azure Credentials Reminder
+
+Your Azure credentials are stored in `~/nerdbuntu/.env` and are:
+- ✅ Kept local to your machine
+- ✅ Not committed to git (in .gitignore)
+- ✅ Used only for API calls to Azure
+
+To view your current configuration:
+```bash
+cat ~/nerdbuntu/.env
+```
+
 ## Cost Information
 
-**Azure AI Services:**
-- Free tier: 20 transactions/minute
-- S0 tier: Pay-as-you-go (~$0.10-$1.00 per document)
-- You can delete resources anytime:
-  ```bash
-  az group delete --name nerdbuntu-rg
-  ```
+**Azure AI Services costs depend on your usage:**
+- Pay-as-you-go pricing
+- Estimated: ~$0.10-$1.00 per document (varies by size and features used)
+- Monitor usage in Azure Portal
 
 ## Support
 
