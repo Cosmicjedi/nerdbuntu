@@ -1,4 +1,6 @@
 markitdown
+pdfminer.six
+pypdf
 azure-ai-inference
 azure-identity
 openai
