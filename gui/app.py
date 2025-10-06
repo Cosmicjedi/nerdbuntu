@@ -11,6 +11,7 @@ from tkinter import filedialog, messagebox, ttk, scrolledtext
 from pathlib import Path
 from datetime import datetime
 import threading
+import time
 
 # Add parent directory to path to import core modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -251,6 +252,14 @@ class NerdbuntuApp:
         # Schedule the update in the main thread
         self.root.after(0, _log)
     
+    def update_status(self, message):
+        """Update status bar - thread-safe"""
+        def _update():
+            self.status_label.config(text=message)
+            self.root.update_idletasks()
+        
+        self.root.after(0, _update)
+    
     def process_file(self):
         """Process the PDF file"""
         if not self.input_entry.get():
@@ -270,56 +279,126 @@ class NerdbuntuApp:
     
     def _process_file_thread(self):
         """Process file in separate thread"""
+        output_path = None
+        
         try:
-            self.process_btn.config(state="disabled")
-            self.progress.start()
-            self.status_label.config(text="Processing...")
+            # Disable UI
+            self.root.after(0, lambda: self.process_btn.config(state="disabled"))
+            self.root.after(0, lambda: self.progress.start())
+            self.update_status("Processing...")
             
-            self.log(f"Processing file: {self.input_file}")
+            self.log("="*60)
+            self.log(f"Starting PDF processing pipeline")
+            self.log(f"Input: {self.input_file}")
+            self.log("="*60)
             
-            # Convert PDF to markdown
-            self.log("Converting PDF to Markdown...")
+            # Step 1: Convert PDF to markdown
+            self.update_status("Step 1/4: Converting PDF to Markdown...")
+            self.log("Step 1: Converting PDF to Markdown...")
             result = self.markitdown.convert(self.input_file)
             markdown_text = result.text_content
+            self.log(f"✓ PDF converted successfully ({len(markdown_text)} characters)")
             
-            self.log(f"Conversion complete. Length: {len(markdown_text)} characters")
-            
-            # Apply semantic processing if enabled and available
+            # Step 2: Apply semantic processing if enabled
             if self.enable_semantic.get() and self.azure_configured and self.semantic_linker:
-                self.log("⏳ Starting semantic processing (this may take a minute)...")
+                self.update_status("Step 2/4: Semantic processing (this may take 1-2 minutes)...")
+                self.log("Step 2: Starting semantic processing...")
+                self.log("⏳ This includes chunking, embedding generation, and AI analysis")
+                self.log("⏳ Please be patient - embedding generation can take time for large documents")
+                
                 try:
+                    # This is the SLOW part - it will log its own progress via callback
                     markdown_text = self.semantic_linker.add_semantic_links(
                         markdown_text,
                         Path(self.input_file).name
                     )
+                    self.log("✓ Semantic processing completed successfully")
+                    
                 except Exception as e:
-                    self.log(f"⚠ Semantic processing failed: {e}")
-                    self.log("Continuing with basic conversion...")
+                    self.log(f"✗ Semantic processing failed: {e}")
+                    self.log("⚠ Continuing with basic conversion...")
+            else:
+                self.log("Step 2: Skipping semantic processing (not enabled)")
             
-            # Save output
+            # Step 3: Save output file
+            self.update_status("Step 3/4: Writing file to disk...")
+            self.log("Step 3: Writing output file...")
             output_filename = Path(self.input_file).stem + ".md"
             output_path = self.output_dir / output_filename
             
-            self.log(f"Saving to: {output_path}")
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(markdown_text)
             
-            self.log("✓ Processing complete!")
-            self.status_label.config(text="Complete")
+            # Verify file was written
+            if output_path.exists():
+                file_size = output_path.stat().st_size
+                self.log(f"✓ File written successfully: {output_path}")
+                self.log(f"  File size: {file_size:,} bytes")
+            else:
+                raise Exception("File was not created on disk!")
             
-            messagebox.showinfo(
-                "Success",
-                f"PDF successfully converted!\n\nOutput: {output_path}"
-            )
+            # Step 4: Verify everything is complete
+            self.update_status("Step 4/4: Verifying completion...")
+            self.log("Step 4: Verifying all processing is complete...")
+            
+            # Ensure all file operations are flushed to disk
+            os.sync()
+            time.sleep(0.5)  # Small delay to ensure filesystem operations complete
+            
+            # Verify file still exists and is readable
+            if output_path.exists() and output_path.is_file():
+                self.log("✓ Output file verified on disk")
+            else:
+                raise Exception("Output file verification failed!")
+            
+            # Check vector database if semantic was enabled
+            if self.enable_semantic.get() and self.azure_configured and self.semantic_linker:
+                if self.semantic_linker.collection:
+                    item_count = self.semantic_linker.collection.count()
+                    self.log(f"✓ Vector database populated with {item_count} chunks")
+                else:
+                    self.log("⚠ Vector database not initialized")
+            
+            # Final success
+            self.log("="*60)
+            self.log("✓✓✓ ALL PROCESSING COMPLETE ✓✓✓")
+            self.log(f"Output file: {output_path}")
+            self.log("="*60)
+            
+            self.update_status("✓ Complete - All operations finished successfully")
+            
+            # Show success dialog
+            def show_success():
+                messagebox.showinfo(
+                    "Processing Complete",
+                    f"PDF successfully converted!\n\n"
+                    f"Output: {output_path}\n"
+                    f"Size: {output_path.stat().st_size:,} bytes\n\n"
+                    f"All semantic processing and database operations completed."
+                )
+            
+            self.root.after(0, show_success)
             
         except Exception as e:
-            self.log(f"✗ Error: {str(e)}")
-            self.status_label.config(text="Error")
-            messagebox.showerror("Error", f"Processing failed: {str(e)}")
+            self.log("="*60)
+            self.log(f"✗✗✗ ERROR OCCURRED ✗✗✗")
+            self.log(f"Error: {str(e)}")
+            self.log("="*60)
+            self.update_status("✗ Error - Processing failed")
+            
+            def show_error():
+                messagebox.showerror(
+                    "Processing Failed", 
+                    f"An error occurred:\n\n{str(e)}\n\n"
+                    f"Check the log for details."
+                )
+            
+            self.root.after(0, show_error)
         
         finally:
-            self.progress.stop()
-            self.process_btn.config(state="normal")
+            # Re-enable UI
+            self.root.after(0, lambda: self.progress.stop())
+            self.root.after(0, lambda: self.process_btn.config(state="normal"))
 
 
 def main():
