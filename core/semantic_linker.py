@@ -6,6 +6,7 @@ import json
 from datetime import datetime
 from azure.ai.inference import ChatCompletionsClient
 from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import HttpResponseError
 import chromadb
 from sentence_transformers import SentenceTransformer
 
@@ -23,6 +24,7 @@ class SemanticLinker:
         self.embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
         self.chroma_client = None
         self.collection = None
+        self.azure_available = True
         
     def initialize_vector_db(self, db_path):
         """Initialize ChromaDB for vector storage"""
@@ -66,6 +68,9 @@ class SemanticLinker:
     
     def extract_key_concepts(self, text):
         """Use Azure AI to extract key concepts from text"""
+        if not self.azure_available:
+            return []
+            
         try:
             response = self.client.complete(
                 messages=[
@@ -83,6 +88,22 @@ class SemanticLinker:
             
             concepts = json.loads(response.choices[0].message.content)
             return concepts if isinstance(concepts, list) else []
+        except HttpResponseError as e:
+            if e.status_code == 404:
+                print(f"Azure AI Error (404): Resource not found.")
+                print(f"This usually means:")
+                print(f"  1. The endpoint URL is incorrect")
+                print(f"  2. The model deployment name doesn't exist")
+                print(f"  3. The deployment is not in the specified region")
+                print(f"\nCurrent endpoint: {self.azure_endpoint}")
+                print(f"\nPlease check your .env file and ensure:")
+                print(f"  - AZURE_ENDPOINT is correct (e.g., https://YOUR-RESOURCE.openai.azure.com/)")
+                print(f"  - Your deployment name matches what's configured in Azure Portal")
+                print(f"\nDisabling Azure AI features for this session.")
+                self.azure_available = False
+            else:
+                print(f"Azure AI Error ({e.status_code}): {e.message}")
+            return []
         except Exception as e:
             print(f"Error extracting concepts: {e}")
             return []
@@ -119,14 +140,14 @@ class SemanticLinker:
             metadatas=[{"source": filename, "chunk_id": i} for i in range(len(chunks))]
         )
         
-        # Extract key concepts
+        # Extract key concepts (will skip if Azure unavailable)
         key_concepts = self.extract_key_concepts(markdown_text)
         
         # Add metadata section to markdown
         metadata = f"""---
 source: {filename}
 processed: {datetime.now().isoformat()}
-key_concepts: {', '.join(key_concepts[:10])}
+key_concepts: {', '.join(key_concepts[:10]) if key_concepts else 'N/A (Azure AI unavailable)'}
 chunks: {len(chunks)}
 ---
 
@@ -135,7 +156,10 @@ chunks: {len(chunks)}
         # Add backlinks section at the end
         backlinks = "\n\n---\n\n## Semantic Backlinks\n\n"
         backlinks += "This document is semantically linked in the vector database.\n"
-        backlinks += f"- **Key Concepts**: {', '.join(key_concepts[:10])}\n"
+        if key_concepts:
+            backlinks += f"- **Key Concepts**: {', '.join(key_concepts[:10])}\n"
+        else:
+            backlinks += "- **Key Concepts**: Not extracted (Azure AI unavailable)\n"
         backlinks += f"- **Total Chunks**: {len(chunks)}\n"
         
         return metadata + markdown_text + backlinks
