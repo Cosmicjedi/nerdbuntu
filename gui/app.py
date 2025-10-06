@@ -27,12 +27,37 @@ except ImportError:
     print("  pip install python-dotenv")
     sys.exit(1)
 
+# Import core modules
 try:
     from core.semantic_linker import SemanticLinker
+except ImportError as e:
+    print(f"Error importing SemanticLinker: {e}")
+    print("Please ensure the core module is properly set up")
+    sys.exit(1)
+
+# Import markitdown
+try:
     from markitdown import MarkItDown
+except ImportError as e:
+    print(f"Error importing MarkItDown: {e}")
+    print("\nMarkItDown is not installed. Please install it:")
+    print("  pip install markitdown")
+    print("\nOr install all dependencies:")
+    print("  pip install -r requirements.txt")
+    print("\nNote: Make sure you're in your virtual environment if using one")
+    sys.exit(1)
+
+# Import Azure and other dependencies
+try:
+    from azure.ai.inference import ChatCompletionsClient
+    from azure.core.credentials import AzureKeyCredential
+    import chromadb
+    from sentence_transformers import SentenceTransformer
 except ImportError as e:
     print(f"Error importing required packages: {e}")
     print("Please run setup.sh first to install dependencies")
+    print("Or install manually:")
+    print("  pip install -r requirements.txt")
     sys.exit(1)
 
 
@@ -49,15 +74,41 @@ class NerdbuntuApp:
         self.azure_api_key = os.getenv("AZURE_API_KEY")
         
         if not self.azure_endpoint or not self.azure_api_key:
+            messagebox.showwarning(
+                "Configuration Warning",
+                "Azure credentials not found in .env file.\n\n"
+                "Semantic features will be disabled.\n"
+                "To enable them, copy .env.template to .env and add your credentials."
+            )
+            self.azure_configured = False
+        else:
+            self.azure_configured = True
+        
+        # Initialize components
+        try:
+            self.markitdown = MarkItDown()
+        except Exception as e:
             messagebox.showerror(
-                "Configuration Error",
-                "Azure credentials not found. Please run setup.sh first."
+                "Initialization Error",
+                f"Failed to initialize MarkItDown: {e}\n\n"
+                "Please ensure all dependencies are installed."
             )
             sys.exit(1)
         
-        # Initialize components
-        self.markitdown = MarkItDown()
-        self.semantic_linker = SemanticLinker(self.azure_endpoint, self.azure_api_key)
+        # Initialize semantic linker only if Azure is configured
+        if self.azure_configured:
+            try:
+                self.semantic_linker = SemanticLinker(self.azure_endpoint, self.azure_api_key)
+            except Exception as e:
+                messagebox.showwarning(
+                    "Azure Initialization Warning",
+                    f"Failed to initialize semantic linker: {e}\n\n"
+                    "Semantic features will be disabled."
+                )
+                self.azure_configured = False
+                self.semantic_linker = None
+        else:
+            self.semantic_linker = None
         
         # Default paths
         self.input_file = None
@@ -68,8 +119,17 @@ class NerdbuntuApp:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.vector_db_path.mkdir(parents=True, exist_ok=True)
         
-        # Initialize vector DB
-        self.semantic_linker.initialize_vector_db(str(self.vector_db_path))
+        # Initialize vector DB only if Azure is configured
+        if self.azure_configured and self.semantic_linker:
+            try:
+                self.semantic_linker.initialize_vector_db(str(self.vector_db_path))
+            except Exception as e:
+                messagebox.showwarning(
+                    "Vector DB Warning",
+                    f"Failed to initialize vector database: {e}\n\n"
+                    "Semantic features will be disabled."
+                )
+                self.azure_configured = False
         
         self.setup_ui()
     
@@ -82,6 +142,17 @@ class NerdbuntuApp:
             font=("Arial", 16, "bold")
         )
         title_label.pack(pady=10)
+        
+        # Configuration status
+        status_text = "Azure AI: " + ("✓ Configured" if self.azure_configured else "✗ Not Configured")
+        status_color = "green" if self.azure_configured else "orange"
+        config_label = tk.Label(
+            self.root,
+            text=status_text,
+            font=("Arial", 10),
+            fg=status_color
+        )
+        config_label.pack()
         
         # File selection frame
         file_frame = tk.LabelFrame(self.root, text="File Selection", padx=10, pady=10)
@@ -104,19 +175,31 @@ class NerdbuntuApp:
         options_frame = tk.LabelFrame(self.root, text="Processing Options", padx=10, pady=10)
         options_frame.pack(fill="x", padx=20, pady=5)
         
-        self.enable_semantic = tk.BooleanVar(value=True)
-        tk.Checkbutton(
+        self.enable_semantic = tk.BooleanVar(value=self.azure_configured)
+        semantic_checkbox = tk.Checkbutton(
             options_frame,
             text="Enable Semantic Backlinking (uses Azure AI)",
-            variable=self.enable_semantic
-        ).pack(anchor="w")
+            variable=self.enable_semantic,
+            state="normal" if self.azure_configured else "disabled"
+        )
+        semantic_checkbox.pack(anchor="w")
         
-        self.extract_concepts = tk.BooleanVar(value=True)
-        tk.Checkbutton(
+        self.extract_concepts = tk.BooleanVar(value=self.azure_configured)
+        concepts_checkbox = tk.Checkbutton(
             options_frame,
             text="Extract Key Concepts (uses Azure AI)",
-            variable=self.extract_concepts
-        ).pack(anchor="w")
+            variable=self.extract_concepts,
+            state="normal" if self.azure_configured else "disabled"
+        )
+        concepts_checkbox.pack(anchor="w")
+        
+        if not self.azure_configured:
+            tk.Label(
+                options_frame,
+                text="⚠ Azure features disabled - configure .env to enable",
+                fg="orange",
+                font=("Arial", 9, "italic")
+            ).pack(anchor="w", pady=5)
         
         # Process button
         self.process_btn = tk.Button(
@@ -210,14 +293,18 @@ class NerdbuntuApp:
             
             self.log(f"Conversion complete. Length: {len(markdown_text)} characters")
             
-            # Apply semantic processing if enabled
-            if self.enable_semantic.get():
+            # Apply semantic processing if enabled and available
+            if self.enable_semantic.get() and self.azure_configured and self.semantic_linker:
                 self.log("Applying semantic backlinking...")
-                markdown_text = self.semantic_linker.add_semantic_links(
-                    markdown_text,
-                    Path(self.input_file).name
-                )
-                self.log("Semantic backlinking complete")
+                try:
+                    markdown_text = self.semantic_linker.add_semantic_links(
+                        markdown_text,
+                        Path(self.input_file).name
+                    )
+                    self.log("Semantic backlinking complete")
+                except Exception as e:
+                    self.log(f"⚠ Semantic processing failed: {e}")
+                    self.log("Continuing with basic conversion...")
             
             # Save output
             output_filename = Path(self.input_file).stem + ".md"
