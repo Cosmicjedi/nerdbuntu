@@ -2,7 +2,7 @@
 
 **Intelligent PDF to Markdown Converter with Azure AI Integration**
 
-Nerdbuntu is an Ubuntu-based solution that uses MarkItDown with Azure AI Factory to intelligently parse PDFs into markdown files with semantic backlinking for Retrieval Augmented Generation (RAG) systems.
+Nerdbuntu is an Ubuntu-based solution that uses MarkItDown with Azure AI to intelligently parse PDFs into markdown files with semantic backlinking for Retrieval Augmented Generation (RAG) systems.
 
 ## Features ✨
 
@@ -11,7 +11,7 @@ Nerdbuntu is an Ubuntu-based solution that uses MarkItDown with Azure AI Factory
 - 🔗 **Semantic Backlinking**: Automatically creates semantic links between content
 - 💾 **Vector Database**: ChromaDB integration for efficient similarity search
 - 🎨 **User-Friendly GUI**: Simple Tkinter interface for file selection
-- 📦 **Automated Setup**: One-script installation and Azure configuration
+- 📦 **Automated Setup**: One-script installation with your Azure credentials
 - 🔍 **Key Concept Extraction**: AI-powered concept identification
 - 📊 **RAG-Ready Output**: Optimized for retrieval augmented generation
 
@@ -19,8 +19,19 @@ Nerdbuntu is an Ubuntu-based solution that uses MarkItDown with Azure AI Factory
 
 - Ubuntu 20.04+ (or Debian-based Linux distribution)
 - Internet connection
-- Azure account (free tier works)
+- **Azure AI credentials** (API endpoint and key)
 - Python 3.8+
+
+### Getting Azure Credentials
+
+Before running the setup, you'll need your Azure AI credentials:
+
+1. Go to [Azure Portal](https://portal.azure.com)
+2. Navigate to your Azure OpenAI or AI Services resource
+3. Go to "Keys and Endpoint" section
+4. Copy the **Endpoint** (e.g., `https://your-service.openai.azure.com/`)
+5. Copy one of the **Keys**
+6. Note your **Deployment Name** (e.g., `gpt-4o`, `gpt-4`)
 
 ## Quick Start 🚀
 
@@ -35,11 +46,9 @@ cd nerdbuntu
 
 The setup script will:
 - Install all system dependencies
-- Install Azure CLI
 - Create Python virtual environment
-- Install all Python packages
-- Authenticate with Azure
-- Create Azure AI Services resources
+- Install all Python packages (MarkItDown, Azure AI, ChromaDB, etc.)
+- **Prompt you for your Azure credentials**
 - Configure environment variables
 
 ```bash
@@ -47,9 +56,10 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-During setup, you'll be prompted to:
-1. Sign in to Azure (browser will open)
-2. Confirm Azure subscription
+During setup, you'll be prompted to enter:
+- **Azure AI Endpoint**: `https://your-service.openai.azure.com/`
+- **Azure API Key**: Your API key (hidden when typing)
+- **Deployment Name**: Your model deployment name (default: `gpt-4o`)
 
 ### 3. Launch the Application
 
@@ -155,11 +165,25 @@ This document is semantically linked in the vector database.
 Located in `~/nerdbuntu/.env`:
 
 ```bash
-AZURE_ENDPOINT=https://your-service.cognitiveservices.azure.com/
+# Azure AI Configuration
+AZURE_ENDPOINT=https://your-service.openai.azure.com/
 AZURE_API_KEY=your-api-key
-AZURE_DEPLOYMENT_NAME=gpt-4
-RESOURCE_GROUP=nerdbuntu-rg
-AI_SERVICE_NAME=nerdbuntu-ai-xxxxx
+AZURE_DEPLOYMENT_NAME=gpt-4o
+
+# Application Settings
+INPUT_DIR=data/input
+OUTPUT_DIR=data/output
+VECTOR_DB_DIR=data/vector_db
+
+# Processing Settings
+CHUNK_SIZE=1000
+MAX_CONCEPTS=10
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+```
+
+You can manually edit this file if you need to change your Azure credentials:
+```bash
+nano ~/nerdbuntu/.env
 ```
 
 ### Directory Structure
@@ -177,28 +201,23 @@ AI_SERVICE_NAME=nerdbuntu-ai-xxxxx
     └── vector_db/           # ChromaDB storage
 ```
 
-## Azure Resources 🌐
-
-The setup script creates:
-
-- **Resource Group**: `nerdbuntu-rg`
-- **Azure AI Services**: Multi-service account (S0 tier)
-  - Includes: GPT models, embeddings, text analytics
-  - Location: East US (configurable)
-
-### Cost Considerations
-
-- Azure AI Services (S0 tier): Pay-as-you-go
-- Estimated cost: $0.10-$1.00 per document (depending on size)
-- Free tier available for testing
-
 ## Advanced Usage 🎓
 
 ### Batch Processing
 
+Use the included examples script:
+
+```bash
+# Process multiple PDFs at once
+python examples.py batch ./input_folder ./output_folder
+```
+
+Or use it programmatically:
+
 ```python
-from app import SemanticLinker, MarkItDown
-import os
+from app import SemanticLinker
+from markitdown import MarkItDown
+from pathlib import Path
 
 # Initialize
 md = MarkItDown()
@@ -217,6 +236,13 @@ for pdf_file in Path("./input").glob("*.pdf"):
 
 ### Querying Semantic Links
 
+```bash
+# Find related content
+python examples.py query "machine learning concepts"
+```
+
+Or programmatically:
+
 ```python
 # Find related content
 results = linker.find_similar_chunks("machine learning concepts", n_results=5)
@@ -231,11 +257,13 @@ for doc, distance in zip(results['documents'][0], results['distances'][0]):
 
 ### Common Issues
 
-**Issue**: Azure authentication fails
+**Issue**: "Azure credentials not found"
 ```bash
-# Solution: Re-authenticate
-az logout
-az login
+# Solution: Check your .env file
+cat ~/nerdbuntu/.env
+
+# Or re-run setup to enter credentials again
+./setup.sh
 ```
 
 **Issue**: ChromaDB errors
@@ -258,6 +286,12 @@ pip install -r requirements.txt
 sudo apt-get install python3-tk
 ```
 
+**Issue**: Azure API errors
+- Verify your endpoint URL is correct (must start with `https://`)
+- Check your API key is valid
+- Ensure your deployment name matches your Azure resource
+- Verify you have quota/credits available in Azure
+
 ## RAG Integration 🤖
 
 The output markdown files are optimized for RAG systems:
@@ -271,6 +305,12 @@ The output markdown files are optimized for RAG systems:
 ### Example RAG Pipeline
 
 ```python
+from app import SemanticLinker
+
+# Initialize
+linker = SemanticLinker(azure_endpoint, azure_api_key)
+linker.initialize_vector_db("./vector_db")
+
 # 1. Query the vector database
 query = "How do neural networks work?"
 results = linker.find_similar_chunks(query, n_results=3)
@@ -279,31 +319,46 @@ results = linker.find_similar_chunks(query, n_results=3)
 context = "\n\n".join(results['documents'][0])
 
 # 3. Generate answer with Azure AI
+from azure.ai.inference import ChatCompletionsClient
+from azure.core.credentials import AzureKeyCredential
+
+client = ChatCompletionsClient(
+    endpoint=azure_endpoint,
+    credential=AzureKeyCredential(azure_api_key)
+)
+
 response = client.complete(
     messages=[
         {"role": "system", "content": "Answer based on the context."},
         {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}"}
-    ]
+    ],
+    model="gpt-4o"
 )
+
+print(response.choices[0].message.content)
 ```
+
+## Cost Considerations 💰
+
+Azure AI Services costs depend on your usage:
+- Pay-as-you-go pricing
+- Estimated: ~$0.10-$1.00 per document (varies by size and features used)
+- Monitor usage in [Azure Portal](https://portal.azure.com)
+- Set up budget alerts to avoid unexpected charges
 
 ## Contributing 🤝
 
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+Contributions welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License 📄
 
-MIT License - see LICENSE file for details
+MIT License - see [LICENSE](LICENSE) file for details
 
 ## Support 💬
 
 - **Issues**: [GitHub Issues](https://github.com/Cosmicjedi/nerdbuntu/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/Cosmicjedi/nerdbuntu/discussions)
+- **Quick Start**: See [QUICKSTART.md](QUICKSTART.md)
 
 ## Acknowledgments 🙏
 
