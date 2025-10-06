@@ -57,30 +57,46 @@ create_backup() {
     echo -e "${GREEN}Step 1: Checking data directories...${NC}"
 
     # Check if output directory has files
-    if [ ! -d "$OUTPUT_DIR" ] || [ -z "$(ls -A $OUTPUT_DIR 2>/dev/null)" ]; then
-        echo -e "${YELLOW}Warning: No files found in output directory ($OUTPUT_DIR)${NC}"
-        echo "Have you processed any PDFs yet?"
+    OUTPUT_FILES=0
+    if [ -d "$OUTPUT_DIR" ]; then
+        if [ -n "$(ls -A $OUTPUT_DIR 2>/dev/null)" ]; then
+            OUTPUT_FILES=$(find "$OUTPUT_DIR" -type f | wc -l)
+            echo -e "${BLUE}Found $OUTPUT_FILES file(s) in output directory${NC}"
+        else
+            echo -e "${YELLOW}Warning: No files found in output directory ($OUTPUT_DIR)${NC}"
+            echo "Have you processed any PDFs yet?"
+            read -p "Continue anyway? (y/n): " response
+            if [[ ! "$response" =~ ^[Yy]$ ]]; then
+                exit 0
+            fi
+        fi
+    else
+        echo -e "${YELLOW}Warning: Output directory does not exist${NC}"
         read -p "Continue anyway? (y/n): " response
         if [[ ! "$response" =~ ^[Yy]$ ]]; then
             exit 0
         fi
-        OUTPUT_FILES=0
-    else
-        OUTPUT_FILES=$(find "$OUTPUT_DIR" -type f | wc -l)
-        echo -e "${BLUE}Found $OUTPUT_FILES file(s) in output directory${NC}"
     fi
 
     # Check if vector database exists
-    if [ ! -d "$VECTOR_DB_DIR" ] || [ -z "$(ls -A $VECTOR_DB_DIR 2>/dev/null)" ]; then
-        echo -e "${YELLOW}Warning: Vector database directory is empty ($VECTOR_DB_DIR)${NC}"
+    VECTOR_DB_SIZE="0 bytes"
+    if [ -d "$VECTOR_DB_DIR" ]; then
+        if [ -n "$(ls -A $VECTOR_DB_DIR 2>/dev/null)" ]; then
+            VECTOR_DB_SIZE=$(du -sh "$VECTOR_DB_DIR" | cut -f1)
+            echo -e "${BLUE}Vector database size: $VECTOR_DB_SIZE${NC}"
+        else
+            echo -e "${YELLOW}Warning: Vector database directory is empty ($VECTOR_DB_DIR)${NC}"
+            read -p "Continue anyway? (y/n): " response
+            if [[ ! "$response" =~ ^[Yy]$ ]]; then
+                exit 0
+            fi
+        fi
+    else
+        echo -e "${YELLOW}Warning: Vector database directory does not exist${NC}"
         read -p "Continue anyway? (y/n): " response
         if [[ ! "$response" =~ ^[Yy]$ ]]; then
             exit 0
         fi
-        VECTOR_DB_SIZE="0 bytes"
-    else
-        VECTOR_DB_SIZE=$(du -sh "$VECTOR_DB_DIR" | cut -f1)
-        echo -e "${BLUE}Vector database size: $VECTOR_DB_SIZE${NC}"
     fi
 
     echo ""
@@ -93,14 +109,14 @@ create_backup() {
 
     # Copy output files
     echo "Copying markdown files..."
-    if [ -d "$OUTPUT_DIR" ] && [ "$(ls -A $OUTPUT_DIR 2>/dev/null)" ]; then
+    if [ -d "$OUTPUT_DIR" ] && [ -n "$(ls -A $OUTPUT_DIR 2>/dev/null)" ]; then
         mkdir -p "$TEMP_BACKUP/markdown"
         cp -r "$OUTPUT_DIR"/* "$TEMP_BACKUP/markdown/" 2>/dev/null || true
     fi
 
     # Copy vector database
     echo "Copying vector database..."
-    if [ -d "$VECTOR_DB_DIR" ] && [ "$(ls -A $VECTOR_DB_DIR 2>/dev/null)" ]; then
+    if [ -d "$VECTOR_DB_DIR" ] && [ -n "$(ls -A $VECTOR_DB_DIR 2>/dev/null)" ]; then
         mkdir -p "$TEMP_BACKUP/vector_db"
         cp -r "$VECTOR_DB_DIR"/* "$TEMP_BACKUP/vector_db/" 2>/dev/null || true
     fi
@@ -408,22 +424,24 @@ restore_backup() {
     # Check what's in the archive
     HAS_MARKDOWN=false
     HAS_VECTOR_DB=false
+    MARKDOWN_COUNT=0
+    VECTOR_SIZE="0"
 
     if [ -d "$EXTRACTED_DIR/markdown" ]; then
         MARKDOWN_COUNT=$(find "$EXTRACTED_DIR/markdown" -type f 2>/dev/null | wc -l)
-        if [ $MARKDOWN_COUNT -gt 0 ]; then
+        if [ "$MARKDOWN_COUNT" -gt 0 ]; then
             HAS_MARKDOWN=true
             echo -e "${BLUE}Found $MARKDOWN_COUNT markdown file(s)${NC}"
         fi
     fi
 
-    if [ -d "$EXTRACTED_DIR/vector_db" ] && [ "$(ls -A $EXTRACTED_DIR/vector_db 2>/dev/null)" ]; then
+    if [ -d "$EXTRACTED_DIR/vector_db" ] && [ -n "$(ls -A $EXTRACTED_DIR/vector_db 2>/dev/null)" ]; then
         HAS_VECTOR_DB=true
         VECTOR_SIZE=$(du -sh "$EXTRACTED_DIR/vector_db" 2>/dev/null | cut -f1)
         echo -e "${BLUE}Found vector database ($VECTOR_SIZE)${NC}"
     fi
 
-    if [ "$HAS_MARKDOWN" = false ] && [ "$HAS_VECTOR_DB" = false ]; then
+    if [ "$HAS_MARKDOWN" = "false" ] && [ "$HAS_VECTOR_DB" = "false" ]; then
         echo -e "${RED}Error: Backup appears to be empty or invalid${NC}"
         rm -rf "$TEMP_DIR"
         exit 1
@@ -476,7 +494,7 @@ restore_backup() {
     fi
 
     # Restore markdown files
-    if [ "$HAS_MARKDOWN" = true ]; then
+    if [ "$HAS_MARKDOWN" = "true" ]; then
         echo "Restoring markdown files..."
         cp -r "$EXTRACTED_DIR/markdown"/* "$OUTPUT_DIR/" 2>/dev/null || true
         RESTORED_MD=$(find "$OUTPUT_DIR" -type f 2>/dev/null | wc -l)
@@ -484,7 +502,7 @@ restore_backup() {
     fi
 
     # Restore vector database
-    if [ "$HAS_VECTOR_DB" = true ]; then
+    if [ "$HAS_VECTOR_DB" = "true" ]; then
         echo "Restoring vector database..."
         cp -r "$EXTRACTED_DIR/vector_db"/* "$VECTOR_DB_DIR/" 2>/dev/null || true
         echo -e "${GREEN}✓ Restored vector database${NC}"
