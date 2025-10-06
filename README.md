@@ -14,6 +14,7 @@ Nerdbuntu is an Ubuntu-based solution that uses MarkItDown with Azure AI to inte
 - 📦 **Automated Setup**: One-script installation with your Azure credentials
 - 🔍 **Key Concept Extraction**: AI-powered concept identification
 - 📊 **RAG-Ready Output**: Optimized for retrieval augmented generation
+- 🚀 **Export/Import**: Bundle and transport RAG data between machines
 
 ## Prerequisites 📋
 
@@ -115,90 +116,56 @@ This document is semantically linked in the vector database.
 - **Total Chunks**: 15
 ```
 
-## Architecture 🏗️
+## Exporting and Importing RAG Data 📦
 
-### Components
+### Exporting Your Data
 
-```
-┌─────────────────────────────────────────┐
-│           Nerdbuntu Application          │
-├─────────────────────────────────────────┤
-│  ┌─────────────┐    ┌────────────────┐  │
-│  │   Tkinter   │───▶│  MarkItDown    │  │
-│  │     GUI     │    │   Converter    │  │
-│  └─────────────┘    └────────────────┘  │
-│         │                    │           │
-│         ▼                    ▼           │
-│  ┌──────────────────────────────────┐   │
-│  │    Semantic Linker Engine        │   │
-│  ├──────────────────────────────────┤   │
-│  │  • Chunking                      │   │
-│  │  • Embedding (SentenceTransform) │   │
-│  │  • Azure AI Analysis             │   │
-│  │  • Concept Extraction            │   │
-│  └──────────────────────────────────┘   │
-│         │                    │           │
-│         ▼                    ▼           │
-│  ┌─────────────┐    ┌────────────────┐  │
-│  │  ChromaDB   │    │   Azure AI     │  │
-│  │   Vector    │    │   Services     │  │
-│  │     DB      │    │                │  │
-│  └─────────────┘    └────────────────┘  │
-└─────────────────────────────────────────┘
-```
-
-### Data Flow
-
-1. **Input**: PDF file selected via GUI
-2. **Conversion**: MarkItDown → Markdown text
-3. **Chunking**: Text → Semantic chunks
-4. **Embedding**: Chunks → Vector embeddings
-5. **AI Analysis**: Azure AI → Key concepts
-6. **Storage**: Vectors → ChromaDB
-7. **Enrichment**: Markdown + Metadata + Backlinks
-8. **Output**: Enhanced markdown file
-
-## Configuration ⚙️
-
-### Environment Variables
-
-Located in `~/nerdbuntu/.env`:
+If you're processing PDFs on one machine but will use the RAG data on another machine, use the export script:
 
 ```bash
-# Azure AI Configuration
-AZURE_ENDPOINT=https://your-service.openai.azure.com/
-AZURE_API_KEY=your-api-key
-AZURE_DEPLOYMENT_NAME=gpt-4o
-
-# Application Settings
-INPUT_DIR=data/input
-OUTPUT_DIR=data/output
-VECTOR_DB_DIR=data/vector_db
-
-# Processing Settings
-CHUNK_SIZE=1000
-MAX_CONCEPTS=10
-EMBEDDING_MODEL=all-MiniLM-L6-v2
+cd ~/nerdbuntu
+chmod +x export.sh
+./export.sh
 ```
 
-You can manually edit this file if you need to change your Azure credentials:
+This creates a ZIP archive containing:
+- ✅ All processed markdown files
+- ✅ Complete ChromaDB vector database
+- ✅ Metadata and import instructions
+- ✅ Integration examples
+
+The export is saved to `~/nerdbuntu/exports/nerdbuntu_rag_export_TIMESTAMP.zip`
+
+### Importing on Destination Machine
+
+On your destination machine (where you'll use the RAG data):
+
 ```bash
-nano ~/nerdbuntu/.env
+# Option 1: If you have Nerdbuntu installed
+chmod +x import.sh
+./import.sh ~/path/to/nerdbuntu_rag_export_*.zip
+
+# Option 2: Manual extraction
+unzip nerdbuntu_rag_export_*.zip
+cd nerdbuntu_rag_export_*
+# Follow instructions in IMPORT_README.md
 ```
 
-### Directory Structure
+The import script offers two modes:
+- **Merge**: Add to existing data (recommended)
+- **Replace**: Clear existing data and import fresh
 
-```
-~/nerdbuntu/
-├── app.py                    # Main application
-├── setup.sh                  # Setup script
-├── requirements.txt          # Python dependencies
-├── .env                      # Configuration (created by setup)
-├── venv/                     # Python virtual environment
-└── data/
-    ├── input/               # Place PDFs here (optional)
-    ├── output/              # Processed markdown files
-    └── vector_db/           # ChromaDB storage
+### Transport Methods
+
+```bash
+# Via SCP
+scp ~/nerdbuntu/exports/nerdbuntu_rag_export_*.zip user@destination:/path/
+
+# Via cloud storage
+aws s3 cp ~/nerdbuntu/exports/nerdbuntu_rag_export_*.zip s3://bucket/
+
+# Via USB/external drive
+cp ~/nerdbuntu/exports/nerdbuntu_rag_export_*.zip /media/usb/
 ```
 
 ## Advanced Usage 🎓
@@ -251,6 +218,53 @@ for doc, distance in zip(results['documents'][0], results['distances'][0]):
     print(f"Similarity: {1-distance:.3f}")
     print(doc)
     print("---")
+```
+
+## Configuration ⚙️
+
+### Environment Variables
+
+Located in `~/nerdbuntu/.env`:
+
+```bash
+# Azure AI Configuration
+AZURE_ENDPOINT=https://your-service.openai.azure.com/
+AZURE_API_KEY=your-api-key
+AZURE_DEPLOYMENT_NAME=gpt-4o
+
+# Application Settings
+INPUT_DIR=data/input
+OUTPUT_DIR=data/output
+VECTOR_DB_DIR=data/vector_db
+
+# Processing Settings
+CHUNK_SIZE=1000
+MAX_CONCEPTS=10
+EMBEDDING_MODEL=all-MiniLM-L6-v2
+```
+
+You can manually edit this file if you need to change your Azure credentials:
+```bash
+nano ~/nerdbuntu/.env
+```
+
+### Directory Structure
+
+```
+~/nerdbuntu/
+├── app.py                    # Main application
+├── setup.sh                  # Setup script
+├── export.sh                 # Export RAG data
+├── import.sh                 # Import RAG data
+├── examples.py               # Advanced usage examples
+├── requirements.txt          # Python dependencies
+├── .env                      # Configuration (created by setup)
+├── venv/                     # Python virtual environment
+├── exports/                  # Export archives
+└── data/
+    ├── input/               # Place PDFs here (optional)
+    ├── output/              # Processed markdown files
+    └── vector_db/           # ChromaDB storage
 ```
 
 ## Troubleshooting 🔧
@@ -369,6 +383,7 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 ## Roadmap 🗺️
 
+- [x] Export/Import functionality
 - [ ] Batch processing UI
 - [ ] Web interface (Flask/FastAPI)
 - [ ] Additional file formats (DOCX, PPTX)
