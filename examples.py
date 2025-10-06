@@ -6,7 +6,7 @@ Example script demonstrating batch processing and advanced features
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from app import SemanticLinker
+from core.semantic_linker import SemanticLinker
 from markitdown import MarkItDown
 
 # Load environment
