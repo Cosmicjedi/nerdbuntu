@@ -1,0 +1,12 @@
+markitdown
+azure-ai-inference
+azure-identity
+openai
+python-dotenv
+sentence-transformers
+chromadb
+numpy
+flask
+pillow
+beautifulsoup4
+requests
