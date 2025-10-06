@@ -1,6 +1,4 @@
-markitdown
-pdfminer.six
-pypdf
+markitdown[all]
 azure-ai-inference
 azure-identity
 openai
