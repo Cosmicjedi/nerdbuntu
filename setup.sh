@@ -33,6 +33,7 @@ sudo apt-get install -y \
     python3 \
     python3-pip \
     python3-venv \
+    python3-tk \
     git \
     curl \
     jq \
@@ -41,107 +42,103 @@ sudo apt-get install -y \
     libffi-dev \
     python3-dev
 
-# Install Azure CLI
-echo -e "${GREEN}Step 3: Installing Azure CLI...${NC}"
-if ! command -v az &> /dev/null; then
-    curl -sL https://aka.ms/InstallAzureCLIDeb | sudo bash
-else
-    echo "Azure CLI already installed"
-fi
-
 # Create project directory
-echo -e "${GREEN}Step 4: Creating project directory...${NC}"
+echo -e "${GREEN}Step 3: Creating project directory...${NC}"
 PROJECT_DIR="$HOME/nerdbuntu"
 mkdir -p "$PROJECT_DIR"
 cd "$PROJECT_DIR"
 
 # Create Python virtual environment
-echo -e "${GREEN}Step 5: Setting up Python virtual environment...${NC}"
+echo -e "${GREEN}Step 4: Setting up Python virtual environment...${NC}"
 python3 -m venv venv
 source venv/bin/activate
 
 # Install Python packages
-echo -e "${GREEN}Step 6: Installing Python packages...${NC}"
+echo -e "${GREEN}Step 5: Installing Python packages...${NC}"
 pip install --upgrade pip
 pip install markitdown
 pip install azure-ai-inference
 pip install azure-identity
 pip install openai
 pip install python-dotenv
-pip install tkinter
 pip install sentence-transformers
 pip install chromadb
 pip install numpy
 pip install flask
+pip install pillow
+pip install beautifulsoup4
+pip install requests
 
-# Azure Login
-echo -e "${GREEN}Step 7: Azure Authentication...${NC}"
-echo "Please sign in to Azure..."
-az login
+echo ""
+echo -e "${GREEN}Step 6: Azure Configuration${NC}"
+echo "Please enter your Azure AI credentials:"
+echo ""
 
-# Get Azure subscription
-SUBSCRIPTION_ID=$(az account show --query id -o tsv)
-echo "Using subscription: $SUBSCRIPTION_ID"
+# Prompt for Azure endpoint
+read -p "Azure AI Endpoint (e.g., https://your-service.openai.azure.com/): " AZURE_ENDPOINT
 
-# Set resource group name
-RESOURCE_GROUP="nerdbuntu-rg"
-LOCATION="eastus"
+# Validate endpoint format
+while [[ ! "$AZURE_ENDPOINT" =~ ^https:// ]]; then
+    echo -e "${RED}Error: Endpoint must start with https://${NC}"
+    read -p "Azure AI Endpoint: " AZURE_ENDPOINT
+done
 
-echo -e "${GREEN}Step 8: Creating Azure resources...${NC}"
-echo "Creating resource group: $RESOURCE_GROUP in $LOCATION"
+# Prompt for Azure API key
+read -sp "Azure API Key: " AZURE_API_KEY
+echo ""
 
-# Create resource group if it doesn't exist
-if ! az group show --name "$RESOURCE_GROUP" &> /dev/null; then
-    az group create --name "$RESOURCE_GROUP" --location "$LOCATION"
-else
-    echo "Resource group already exists"
-fi
+# Validate API key is not empty
+while [ -z "$AZURE_API_KEY" ]; do
+    echo -e "${RED}Error: API Key cannot be empty${NC}"
+    read -sp "Azure API Key: " AZURE_API_KEY
+    echo ""
+done
 
-# Create Azure AI Services account
-AI_SERVICE_NAME="nerdbuntu-ai-$(date +%s)"
-echo "Creating Azure AI Services: $AI_SERVICE_NAME"
-
-if ! az cognitiveservices account show --name "$AI_SERVICE_NAME" --resource-group "$RESOURCE_GROUP" &> /dev/null; then
-    az cognitiveservices account create \
-        --name "$AI_SERVICE_NAME" \
-        --resource-group "$RESOURCE_GROUP" \
-        --kind "AIServices" \
-        --sku "S0" \
-        --location "$LOCATION" \
-        --yes
-fi
-
-# Get the endpoint and key
-AZURE_ENDPOINT=$(az cognitiveservices account show \
-    --name "$AI_SERVICE_NAME" \
-    --resource-group "$RESOURCE_GROUP" \
-    --query "properties.endpoint" -o tsv)
-
-AZURE_API_KEY=$(az cognitiveservices account keys list \
-    --name "$AI_SERVICE_NAME" \
-    --resource-group "$RESOURCE_GROUP" \
-    --query "key1" -o tsv)
+# Prompt for deployment name (optional)
+echo ""
+read -p "Azure Deployment Name [default: gpt-4o]: " AZURE_DEPLOYMENT_NAME
+AZURE_DEPLOYMENT_NAME=${AZURE_DEPLOYMENT_NAME:-gpt-4o}
 
 # Create .env file
-echo -e "${GREEN}Step 9: Creating configuration file...${NC}"
+echo -e "${GREEN}Step 7: Creating configuration file...${NC}"
 cat > "$PROJECT_DIR/.env" << EOF
+# Azure AI Configuration
 AZURE_ENDPOINT=$AZURE_ENDPOINT
 AZURE_API_KEY=$AZURE_API_KEY
-AZURE_DEPLOYMENT_NAME=gpt-4
-RESOURCE_GROUP=$RESOURCE_GROUP
-AI_SERVICE_NAME=$AI_SERVICE_NAME
+AZURE_DEPLOYMENT_NAME=$AZURE_DEPLOYMENT_NAME
+
+# Application Settings
+INPUT_DIR=data/input
+OUTPUT_DIR=data/output
+VECTOR_DB_DIR=data/vector_db
+
+# Processing Settings
+CHUNK_SIZE=1000
+MAX_CONCEPTS=10
+EMBEDDING_MODEL=all-MiniLM-L6-v2
 EOF
 
-echo -e "${GREEN}Step 10: Creating data directories...${NC}"
+echo -e "${GREEN}Step 8: Creating data directories...${NC}"
 mkdir -p "$PROJECT_DIR/data/input"
 mkdir -p "$PROJECT_DIR/data/output"
 mkdir -p "$PROJECT_DIR/data/vector_db"
 
-# Download project files from GitHub
-echo -e "${GREEN}Step 11: Downloading project files...${NC}"
+echo -e "${GREEN}Step 9: Downloading project files from GitHub...${NC}"
+# Download app.py if it doesn't exist
 if [ ! -f "$PROJECT_DIR/app.py" ]; then
-    echo "app.py will be created by the repository"
+    echo "Downloading app.py..."
+    curl -sSL https://raw.githubusercontent.com/Cosmicjedi/nerdbuntu/main/app.py -o "$PROJECT_DIR/app.py"
 fi
+
+# Download examples.py if it doesn't exist
+if [ ! -f "$PROJECT_DIR/examples.py" ]; then
+    echo "Downloading examples.py..."
+    curl -sSL https://raw.githubusercontent.com/Cosmicjedi/nerdbuntu/main/examples.py -o "$PROJECT_DIR/examples.py"
+fi
+
+# Make scripts executable
+chmod +x "$PROJECT_DIR/app.py" 2>/dev/null || true
+chmod +x "$PROJECT_DIR/examples.py" 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}=== Setup Complete! ===${NC}"
@@ -149,15 +146,18 @@ echo ""
 echo "Project directory: $PROJECT_DIR"
 echo "Virtual environment: $PROJECT_DIR/venv"
 echo ""
+echo -e "${YELLOW}Configuration saved to: $PROJECT_DIR/.env${NC}"
+echo ""
 echo "To activate the virtual environment, run:"
-echo "  source $PROJECT_DIR/venv/bin/activate"
+echo "  ${YELLOW}source $PROJECT_DIR/venv/bin/activate${NC}"
 echo ""
 echo "To start the application, run:"
-echo "  cd $PROJECT_DIR && python app.py"
+echo "  ${YELLOW}cd $PROJECT_DIR && python app.py${NC}"
 echo ""
-echo "Azure Resources Created:"
-echo "  Resource Group: $RESOURCE_GROUP"
-echo "  AI Service: $AI_SERVICE_NAME"
-echo "  Endpoint: $AZURE_ENDPOINT"
+echo "For batch processing, use:"
+echo "  ${YELLOW}python examples.py batch <input_dir> <output_dir>${NC}"
 echo ""
-echo -e "${YELLOW}Configuration saved to: $PROJECT_DIR/.env${NC}"
+echo "For querying similar content, use:"
+echo "  ${YELLOW}python examples.py query '<search text>'${NC}"
+echo ""
+echo -e "${GREEN}Ready to convert PDFs to intelligent markdown! 🚀${NC}"
