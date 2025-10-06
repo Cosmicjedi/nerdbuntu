@@ -78,7 +78,7 @@ echo ""
 read -p "Azure AI Endpoint (e.g., https://your-service.openai.azure.com/): " AZURE_ENDPOINT
 
 # Validate endpoint format
-while [[ ! "$AZURE_ENDPOINT" =~ ^https:// ]]; then
+while [[ ! "$AZURE_ENDPOINT" =~ ^https:// ]]; do
     echo -e "${RED}Error: Endpoint must start with https://${NC}"
     read -p "Azure AI Endpoint: " AZURE_ENDPOINT
 done
@@ -97,7 +97,9 @@ done
 # Prompt for deployment name (optional)
 echo ""
 read -p "Azure Deployment Name [default: gpt-4o]: " AZURE_DEPLOYMENT_NAME
-AZURE_DEPLOYMENT_NAME=${AZURE_DEPLOYMENT_NAME:-gpt-4o}
+if [ -z "$AZURE_DEPLOYMENT_NAME" ]; then
+    AZURE_DEPLOYMENT_NAME="gpt-4o"
+fi
 
 # Create .env file
 echo -e "${GREEN}Step 7: Creating configuration file...${NC}"
@@ -136,6 +138,13 @@ if [ ! -f "$PROJECT_DIR/examples.py" ]; then
     curl -sSL https://raw.githubusercontent.com/Cosmicjedi/nerdbuntu/main/examples.py -o "$PROJECT_DIR/examples.py"
 fi
 
+# Download backup_restore.sh if it doesn't exist
+if [ ! -f "$PROJECT_DIR/backup_restore.sh" ]; then
+    echo "Downloading backup_restore.sh..."
+    curl -sSL https://raw.githubusercontent.com/Cosmicjedi/nerdbuntu/main/backup_restore.sh -o "$PROJECT_DIR/backup_restore.sh"
+    chmod +x "$PROJECT_DIR/backup_restore.sh"
+fi
+
 # Make scripts executable
 chmod +x "$PROJECT_DIR/app.py" 2>/dev/null || true
 chmod +x "$PROJECT_DIR/examples.py" 2>/dev/null || true
@@ -159,5 +168,8 @@ echo "  ${YELLOW}python examples.py batch <input_dir> <output_dir>${NC}"
 echo ""
 echo "For querying similar content, use:"
 echo "  ${YELLOW}python examples.py query '<search text>'${NC}"
+echo ""
+echo "To backup your data, use:"
+echo "  ${YELLOW}./backup_restore.sh backup${NC}"
 echo ""
 echo -e "${GREEN}Ready to convert PDFs to intelligent markdown! 🚀${NC}"
