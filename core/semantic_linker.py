@@ -25,6 +25,18 @@ class SemanticLinker:
         self.chroma_client = None
         self.collection = None
         self.azure_available = True
+        self.progress_callback = None
+        
+    def set_progress_callback(self, callback):
+        """Set a callback function for progress updates"""
+        self.progress_callback = callback
+        
+    def _log_progress(self, message):
+        """Log progress if callback is set"""
+        if self.progress_callback:
+            self.progress_callback(message)
+        else:
+            print(message)
         
     def initialize_vector_db(self, db_path):
         """Initialize ChromaDB for vector storage"""
@@ -72,6 +84,7 @@ class SemanticLinker:
             return []
             
         try:
+            self._log_progress("Calling Azure AI to extract key concepts...")
             response = self.client.complete(
                 messages=[
                     {
@@ -87,30 +100,27 @@ class SemanticLinker:
             )
             
             concepts = json.loads(response.choices[0].message.content)
+            self._log_progress(f"Extracted {len(concepts) if isinstance(concepts, list) else 0} concepts")
             return concepts if isinstance(concepts, list) else []
         except HttpResponseError as e:
             if e.status_code == 404:
-                print(f"Azure AI Error (404): Resource not found.")
-                print(f"This usually means:")
-                print(f"  1. The endpoint URL is incorrect")
-                print(f"  2. The model deployment name doesn't exist")
-                print(f"  3. The deployment is not in the specified region")
-                print(f"\nCurrent endpoint: {self.azure_endpoint}")
-                print(f"\nPlease check your .env file and ensure:")
-                print(f"  - AZURE_ENDPOINT is correct (e.g., https://YOUR-RESOURCE.openai.azure.com/)")
-                print(f"  - Your deployment name matches what's configured in Azure Portal")
-                print(f"\nDisabling Azure AI features for this session.")
+                self._log_progress("⚠ Azure AI Error (404): Resource not found")
+                self._log_progress("  The deployment name or endpoint is incorrect")
+                self._log_progress("  Disabling Azure AI features for this session")
                 self.azure_available = False
             else:
-                print(f"Azure AI Error ({e.status_code}): {e.message}")
+                self._log_progress(f"⚠ Azure AI Error ({e.status_code}): {e.message}")
             return []
         except Exception as e:
-            print(f"Error extracting concepts: {e}")
+            self._log_progress(f"⚠ Error extracting concepts: {e}")
             return []
     
     def generate_embeddings(self, texts):
         """Generate embeddings for text chunks"""
-        return self.embedding_model.encode(texts)
+        self._log_progress(f"Generating embeddings for {len(texts)} chunks (this may take a moment)...")
+        embeddings = self.embedding_model.encode(texts, show_progress_bar=False)
+        self._log_progress("Embeddings generated successfully")
+        return embeddings
     
     def find_similar_chunks(self, query_text, n_results=5):
         """Find similar chunks using vector similarity"""
@@ -126,12 +136,18 @@ class SemanticLinker:
     
     def add_semantic_links(self, markdown_text, filename):
         """Add semantic backlinks to markdown"""
-        chunks = self.chunk_markdown(markdown_text)
+        self._log_progress("Starting semantic processing...")
         
-        # Generate embeddings for all chunks
+        # Chunk the markdown
+        self._log_progress("Chunking markdown text...")
+        chunks = self.chunk_markdown(markdown_text)
+        self._log_progress(f"Created {len(chunks)} chunks")
+        
+        # Generate embeddings for all chunks (THIS CAN BE SLOW!)
         embeddings = self.generate_embeddings(chunks)
         
         # Store in vector database
+        self._log_progress("Storing in vector database...")
         ids = [f"{filename}_chunk_{i}" for i in range(len(chunks))]
         self.collection.add(
             ids=ids,
@@ -139,9 +155,10 @@ class SemanticLinker:
             documents=chunks,
             metadatas=[{"source": filename, "chunk_id": i} for i in range(len(chunks))]
         )
+        self._log_progress("Vector database updated")
         
         # Extract key concepts (will skip if Azure unavailable)
-        key_concepts = self.extract_key_concepts(markdown_text)
+        key_concepts = self.extract_key_concepts(markdown_text) if self.azure_available else []
         
         # Add metadata section to markdown
         metadata = f"""---
@@ -162,4 +179,5 @@ chunks: {len(chunks)}
             backlinks += "- **Key Concepts**: Not extracted (Azure AI unavailable)\n"
         backlinks += f"- **Total Chunks**: {len(chunks)}\n"
         
+        self._log_progress("Semantic processing complete")
         return metadata + markdown_text + backlinks
