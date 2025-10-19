@@ -8,21 +8,37 @@ echo " ChromaDB to Qdrant Migration GUI"
 echo "==================================="
 echo ""
 
+# Get the script directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+cd "$SCRIPT_DIR"
+
+# Check if virtual environment exists
+if [ -d "venv" ]; then
+    echo "✅ Virtual environment found"
+    echo "Activating virtual environment..."
+    source venv/bin/activate
+    PYTHON_CMD="python"
+else
+    echo "⚠️  No virtual environment found"
+    echo "Using system Python..."
+    PYTHON_CMD="python3"
+fi
+
 # Check if Python is available
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python 3 is required but not found"
+if ! command -v $PYTHON_CMD &> /dev/null; then
+    echo "❌ Python is required but not found"
     echo "Please install Python 3 and try again"
     exit 1
 fi
 
-echo "✅ Python 3 found: $(python3 --version)"
+echo "✅ Python found: $($PYTHON_CMD --version)"
 
 # Check for required packages
 echo ""
 echo "Checking dependencies..."
 
 check_package() {
-    if python3 -c "import $1" 2>/dev/null; then
+    if $PYTHON_CMD -c "import $1" 2>/dev/null; then
         echo "✅ $1 installed"
         return 0
     else
@@ -47,16 +63,43 @@ check_package "tkinter" || {
 if [ $MISSING_PACKAGES -eq 1 ]; then
     echo ""
     echo "⚠️  Some packages are missing"
-    echo ""
-    read -p "Would you like to install missing packages now? (y/n) " -n 1 -r
-    echo ""
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        echo "Installing packages..."
-        pip install chromadb sentence-transformers qdrant-client
-        echo "✅ Packages installed"
+    
+    # Only offer to install if we have a venv or pip
+    if [ -d "venv" ] || command -v pip &> /dev/null || command -v pip3 &> /dev/null; then
+        echo ""
+        read -p "Would you like to install missing packages now? (y/n) " -n 1 -r
+        echo ""
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            echo "Installing packages..."
+            
+            # Use the appropriate pip command
+            if [ -d "venv" ]; then
+                pip install chromadb sentence-transformers qdrant-client
+            elif command -v pip3 &> /dev/null; then
+                pip3 install chromadb sentence-transformers qdrant-client
+            else
+                pip install chromadb sentence-transformers qdrant-client
+            fi
+            
+            echo "✅ Packages installed"
+        else
+            echo ""
+            echo "To install packages manually, run:"
+            if [ -d "venv" ]; then
+                echo "  source venv/bin/activate"
+                echo "  pip install chromadb sentence-transformers qdrant-client"
+            else
+                echo "  pip3 install chromadb sentence-transformers qdrant-client"
+            fi
+            exit 1
+        fi
     else
+        echo ""
         echo "Please install missing packages manually:"
-        echo "  pip install chromadb sentence-transformers qdrant-client"
+        echo "  pip3 install chromadb sentence-transformers qdrant-client"
+        echo ""
+        echo "Or run the setup script first:"
+        echo "  ./setup.sh"
         exit 1
     fi
 fi
@@ -66,7 +109,7 @@ echo "🚀 Launching Migration GUI..."
 echo ""
 
 # Launch the GUI
-python3 launch_migration_gui.py
+$PYTHON_CMD launch_migration_gui.py
 
 # Check exit status
 if [ $? -eq 0 ]; then
