@@ -2,6 +2,7 @@
 """
 Nerdbuntu GUI Application  
 Intelligent PDF to Markdown converter with semantic backlinking for RAG
+Supports single file and bulk directory processing
 """
 
 import os
@@ -12,6 +13,7 @@ from pathlib import Path
 from datetime import datetime
 import threading
 import time
+import glob
 
 # Add parent directory to path to import core modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -56,12 +58,12 @@ except ImportError as e:
 
 
 class NerdbuntuApp:
-    """Main application GUI"""
+    """Main application GUI with single file and bulk directory processing"""
     
     def __init__(self, root):
         self.root = root
         self.root.title("Nerdbuntu - Intelligent PDF to Markdown Converter")
-        self.root.geometry("900x700")
+        self.root.geometry("950x750")
         
         # Set up cleanup on window close
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -100,8 +102,21 @@ class NerdbuntuApp:
         
         # Default paths
         self.input_file = None
+        self.input_directory = None
         self.output_dir = Path.home() / "nerdbuntu" / "data" / "output"
         self.vector_db_path = Path.home() / "nerdbuntu" / "data" / "vector_db"
+        
+        # Processing mode: 'file' or 'directory'
+        self.processing_mode = tk.StringVar(value='file')
+        
+        # Bulk processing stats
+        self.bulk_stats = {
+            'total': 0,
+            'processed': 0,
+            'successful': 0,
+            'failed': 0,
+            'skipped': 0
+        }
         
         # Create directories
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -143,22 +158,66 @@ class NerdbuntuApp:
         )
         config_label.pack()
         
+        # Processing mode selection
+        mode_frame = tk.LabelFrame(self.root, text="Processing Mode", padx=10, pady=10)
+        mode_frame.pack(fill="x", padx=20, pady=5)
+        
+        tk.Radiobutton(
+            mode_frame,
+            text="Single File - Process one PDF file",
+            variable=self.processing_mode,
+            value='file',
+            command=self.update_mode_ui
+        ).pack(anchor="w")
+        
+        tk.Radiobutton(
+            mode_frame,
+            text="Bulk Directory - Process all PDFs in a directory",
+            variable=self.processing_mode,
+            value='directory',
+            command=self.update_mode_ui
+        ).pack(anchor="w")
+        
         # File selection frame
-        file_frame = tk.LabelFrame(self.root, text="File Selection", padx=10, pady=10)
-        file_frame.pack(fill="x", padx=20, pady=5)
+        self.file_frame = tk.LabelFrame(self.root, text="File Selection", padx=10, pady=10)
+        self.file_frame.pack(fill="x", padx=20, pady=5)
         
-        # Input file
-        tk.Label(file_frame, text="PDF File:").grid(row=0, column=0, sticky="w")
-        self.input_entry = tk.Entry(file_frame, width=60)
-        self.input_entry.grid(row=0, column=1, padx=5)
-        tk.Button(file_frame, text="Browse", command=self.browse_input).grid(row=0, column=2)
+        # Single file input (shown when mode='file')
+        self.file_row = tk.Frame(self.file_frame)
+        self.file_row.pack(fill="x")
+        tk.Label(self.file_row, text="PDF File:").pack(side="left")
+        self.input_entry = tk.Entry(self.file_row, width=55)
+        self.input_entry.pack(side="left", padx=5)
+        tk.Button(self.file_row, text="Browse File", command=self.browse_input_file).pack(side="left")
         
-        # Output directory
-        tk.Label(file_frame, text="Output Directory:").grid(row=1, column=0, sticky="w", pady=5)
-        self.output_entry = tk.Entry(file_frame, width=60)
+        # Directory input (shown when mode='directory')
+        self.dir_row = tk.Frame(self.file_frame)
+        tk.Label(self.dir_row, text="Input Directory:").pack(side="left")
+        self.input_dir_entry = tk.Entry(self.dir_row, width=50)
+        self.input_dir_entry.pack(side="left", padx=5)
+        tk.Button(self.dir_row, text="Browse Directory", command=self.browse_input_directory).pack(side="left")
+        
+        # File pattern for directory mode
+        self.pattern_row = tk.Frame(self.file_frame)
+        tk.Label(self.pattern_row, text="File Pattern:").pack(side="left")
+        self.pattern_entry = tk.Entry(self.pattern_row, width=20)
+        self.pattern_entry.insert(0, "*.pdf")
+        self.pattern_entry.pack(side="left", padx=5)
+        tk.Label(
+            self.pattern_row,
+            text="(e.g., *.pdf, report_*.pdf)",
+            font=("Arial", 9, "italic"),
+            fg="gray"
+        ).pack(side="left")
+        
+        # Output directory (always shown)
+        output_row = tk.Frame(self.file_frame)
+        output_row.pack(fill="x", pady=5)
+        tk.Label(output_row, text="Output Directory:").pack(side="left")
+        self.output_entry = tk.Entry(output_row, width=50)
         self.output_entry.insert(0, str(self.output_dir))
-        self.output_entry.grid(row=1, column=1, padx=5, pady=5)
-        tk.Button(file_frame, text="Browse", command=self.browse_output).grid(row=1, column=2, pady=5)
+        self.output_entry.pack(side="left", padx=5)
+        tk.Button(output_row, text="Browse", command=self.browse_output).pack(side="left")
         
         # Options frame
         options_frame = tk.LabelFrame(self.root, text="Processing Options", padx=10, pady=10)
@@ -182,6 +241,15 @@ class NerdbuntuApp:
         )
         concepts_checkbox.pack(anchor="w")
         
+        # Bulk processing options
+        self.skip_existing = tk.BooleanVar(value=True)
+        skip_checkbox = tk.Checkbutton(
+            options_frame,
+            text="Skip files that already have output (for bulk processing)",
+            variable=self.skip_existing
+        )
+        skip_checkbox.pack(anchor="w")
+        
         if not self.azure_configured:
             tk.Label(
                 options_frame,
@@ -194,7 +262,7 @@ class NerdbuntuApp:
         self.process_btn = tk.Button(
             self.root,
             text="Process PDF",
-            command=self.process_file,
+            command=self.process,
             bg="#4CAF50",
             fg="white",
             font=("Arial", 12, "bold"),
@@ -222,8 +290,28 @@ class NerdbuntuApp:
             anchor="w"
         )
         self.status_label.pack(fill="x", side="bottom")
+        
+        # Initialize UI mode
+        self.update_mode_ui()
     
-    def browse_input(self):
+    def update_mode_ui(self):
+        """Update UI based on selected processing mode"""
+        mode = self.processing_mode.get()
+        
+        if mode == 'file':
+            # Show file input, hide directory input
+            self.file_row.pack(fill="x")
+            self.dir_row.pack_forget()
+            self.pattern_row.pack_forget()
+            self.process_btn.config(text="Process PDF File")
+        else:
+            # Show directory input, hide file input
+            self.file_row.pack_forget()
+            self.dir_row.pack(fill="x")
+            self.pattern_row.pack(fill="x", pady=5)
+            self.process_btn.config(text="Process All PDFs in Directory")
+    
+    def browse_input_file(self):
         """Browse for input PDF file"""
         filename = filedialog.askopenfilename(
             title="Select PDF File",
@@ -233,6 +321,14 @@ class NerdbuntuApp:
             self.input_entry.delete(0, tk.END)
             self.input_entry.insert(0, filename)
             self.input_file = filename
+    
+    def browse_input_directory(self):
+        """Browse for input directory"""
+        directory = filedialog.askdirectory(title="Select Input Directory with PDFs")
+        if directory:
+            self.input_dir_entry.delete(0, tk.END)
+            self.input_dir_entry.insert(0, directory)
+            self.input_directory = directory
     
     def browse_output(self):
         """Browse for output directory"""
@@ -260,8 +356,17 @@ class NerdbuntuApp:
         
         self.root.after(0, _update)
     
-    def process_file(self):
-        """Process the PDF file"""
+    def process(self):
+        """Main process dispatcher"""
+        mode = self.processing_mode.get()
+        
+        if mode == 'file':
+            self.process_single_file()
+        else:
+            self.process_directory()
+    
+    def process_single_file(self):
+        """Process a single PDF file"""
         if not self.input_entry.get():
             messagebox.showerror("Error", "Please select a PDF file")
             return
@@ -274,13 +379,140 @@ class NerdbuntuApp:
             return
         
         # Run processing in a separate thread
-        thread = threading.Thread(target=self._process_file_thread, daemon=True)
+        thread = threading.Thread(target=self._process_file_thread, args=(self.input_file,), daemon=True)
         thread.start()
     
-    def _process_file_thread(self):
-        """Process file in separate thread"""
-        output_path = None
+    def process_directory(self):
+        """Process all PDFs in a directory"""
+        if not self.input_dir_entry.get():
+            messagebox.showerror("Error", "Please select an input directory")
+            return
         
+        self.input_directory = self.input_dir_entry.get()
+        self.output_dir = Path(self.output_entry.get())
+        
+        if not Path(self.input_directory).exists():
+            messagebox.showerror("Error", "Input directory does not exist")
+            return
+        
+        # Get list of files
+        pattern = self.pattern_entry.get() or "*.pdf"
+        search_path = Path(self.input_directory) / pattern
+        files = glob.glob(str(search_path))
+        
+        if not files:
+            messagebox.showerror("Error", f"No files matching '{pattern}' found in directory")
+            return
+        
+        # Confirm with user
+        response = messagebox.askyesno(
+            "Confirm Bulk Processing",
+            f"Found {len(files)} file(s) matching '{pattern}'.\n\n"
+            f"This will process all files and may take a while.\n\n"
+            f"Continue?"
+        )
+        
+        if not response:
+            return
+        
+        # Run bulk processing in a separate thread
+        thread = threading.Thread(target=self._process_directory_thread, args=(files,), daemon=True)
+        thread.start()
+    
+    def _process_directory_thread(self, files):
+        """Process multiple files in bulk"""
+        try:
+            # Disable UI
+            self.root.after(0, lambda: self.process_btn.config(state="disabled"))
+            self.root.after(0, lambda: self.progress.start())
+            
+            # Reset stats
+            self.bulk_stats = {
+                'total': len(files),
+                'processed': 0,
+                'successful': 0,
+                'failed': 0,
+                'skipped': 0
+            }
+            
+            self.log("="*60)
+            self.log(f"BULK PROCESSING MODE")
+            self.log(f"Total files: {self.bulk_stats['total']}")
+            self.log(f"Input directory: {self.input_directory}")
+            self.log(f"Output directory: {self.output_dir}")
+            self.log("="*60)
+            
+            # Process each file
+            for idx, file_path in enumerate(files, 1):
+                file_path = Path(file_path)
+                
+                self.log("")
+                self.log(f"📄 File {idx}/{self.bulk_stats['total']}: {file_path.name}")
+                self.update_status(f"Processing {idx}/{self.bulk_stats['total']}: {file_path.name}")
+                
+                # Check if output already exists
+                output_filename = file_path.stem + ".md"
+                output_path = self.output_dir / output_filename
+                
+                if self.skip_existing.get() and output_path.exists():
+                    self.log(f"  ⏭️  Skipping (output already exists): {output_path.name}")
+                    self.bulk_stats['skipped'] += 1
+                    continue
+                
+                # Process the file
+                try:
+                    self._process_single_file_logic(str(file_path))
+                    self.bulk_stats['successful'] += 1
+                    self.log(f"  ✅ Success: {output_filename}")
+                except Exception as e:
+                    self.bulk_stats['failed'] += 1
+                    self.log(f"  ❌ Failed: {e}")
+                
+                self.bulk_stats['processed'] += 1
+            
+            # Final summary
+            self.log("")
+            self.log("="*60)
+            self.log("BULK PROCESSING COMPLETE")
+            self.log(f"Total files: {self.bulk_stats['total']}")
+            self.log(f"Processed: {self.bulk_stats['processed']}")
+            self.log(f"Successful: {self.bulk_stats['successful']}")
+            self.log(f"Failed: {self.bulk_stats['failed']}")
+            self.log(f"Skipped: {self.bulk_stats['skipped']}")
+            self.log("="*60)
+            
+            self.update_status(f"✓ Bulk processing complete: {self.bulk_stats['successful']}/{self.bulk_stats['total']} successful")
+            
+            # Show summary dialog
+            def show_summary():
+                messagebox.showinfo(
+                    "Bulk Processing Complete",
+                    f"Processing Summary:\n\n"
+                    f"Total files: {self.bulk_stats['total']}\n"
+                    f"Successful: {self.bulk_stats['successful']}\n"
+                    f"Failed: {self.bulk_stats['failed']}\n"
+                    f"Skipped: {self.bulk_stats['skipped']}\n\n"
+                    f"Output directory: {self.output_dir}"
+                )
+            
+            self.root.after(0, show_summary)
+            
+        except Exception as e:
+            self.log(f"❌ Bulk processing error: {e}")
+            self.update_status("✗ Bulk processing failed")
+            
+            def show_error():
+                messagebox.showerror("Bulk Processing Error", f"An error occurred:\n\n{str(e)}")
+            
+            self.root.after(0, show_error)
+        
+        finally:
+            # Re-enable UI
+            self.root.after(0, lambda: self.progress.stop())
+            self.root.after(0, lambda: self.process_btn.config(state="normal"))
+    
+    def _process_file_thread(self, file_path):
+        """Process file in separate thread (wrapper for single file mode)"""
         try:
             # Disable UI
             self.root.after(0, lambda: self.process_btn.config(state="disabled"))
@@ -289,77 +521,13 @@ class NerdbuntuApp:
             
             self.log("="*60)
             self.log(f"Starting PDF processing pipeline")
-            self.log(f"Input: {self.input_file}")
+            self.log(f"Input: {file_path}")
             self.log("="*60)
             
-            # Step 1: Convert PDF to markdown
-            self.update_status("Step 1/4: Converting PDF to Markdown...")
-            self.log("Step 1: Converting PDF to Markdown...")
-            result = self.markitdown.convert(self.input_file)
-            markdown_text = result.text_content
-            self.log(f"✓ PDF converted successfully ({len(markdown_text)} characters)")
+            # Process the file
+            output_path = self._process_single_file_logic(file_path)
             
-            # Step 2: Apply semantic processing if enabled
-            if self.enable_semantic.get() and self.azure_configured and self.semantic_linker:
-                self.update_status("Step 2/4: Semantic processing (this may take 1-2 minutes)...")
-                self.log("Step 2: Starting semantic processing...")
-                self.log("⏳ This includes chunking, embedding generation, and AI analysis")
-                self.log("⏳ Please be patient - embedding generation can take time for large documents")
-                
-                try:
-                    # This is the SLOW part - it will log its own progress via callback
-                    markdown_text = self.semantic_linker.add_semantic_links(
-                        markdown_text,
-                        Path(self.input_file).name
-                    )
-                    self.log("✓ Semantic processing completed successfully")
-                    
-                except Exception as e:
-                    self.log(f"✗ Semantic processing failed: {e}")
-                    self.log("⚠ Continuing with basic conversion...")
-            else:
-                self.log("Step 2: Skipping semantic processing (not enabled)")
-            
-            # Step 3: Save output file
-            self.update_status("Step 3/4: Writing file to disk...")
-            self.log("Step 3: Writing output file...")
-            output_filename = Path(self.input_file).stem + ".md"
-            output_path = self.output_dir / output_filename
-            
-            with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(markdown_text)
-            
-            # Verify file was written
-            if output_path.exists():
-                file_size = output_path.stat().st_size
-                self.log(f"✓ File written successfully: {output_path}")
-                self.log(f"  File size: {file_size:,} bytes")
-            else:
-                raise Exception("File was not created on disk!")
-            
-            # Step 4: Verify everything is complete
-            self.update_status("Step 4/4: Verifying completion...")
-            self.log("Step 4: Verifying all processing is complete...")
-            
-            # Ensure all file operations are flushed to disk
-            os.sync()
-            time.sleep(0.5)  # Small delay to ensure filesystem operations complete
-            
-            # Verify file still exists and is readable
-            if output_path.exists() and output_path.is_file():
-                self.log("✓ Output file verified on disk")
-            else:
-                raise Exception("Output file verification failed!")
-            
-            # Check vector database if semantic was enabled
-            if self.enable_semantic.get() and self.azure_configured and self.semantic_linker:
-                if self.semantic_linker.collection:
-                    item_count = self.semantic_linker.collection.count()
-                    self.log(f"✓ Vector database populated with {item_count} chunks")
-                else:
-                    self.log("⚠ Vector database not initialized")
-            
-            # Final success
+            # Success
             self.log("="*60)
             self.log("✓✓✓ ALL PROCESSING COMPLETE ✓✓✓")
             self.log(f"Output file: {output_path}")
@@ -399,6 +567,69 @@ class NerdbuntuApp:
             # Re-enable UI
             self.root.after(0, lambda: self.progress.stop())
             self.root.after(0, lambda: self.process_btn.config(state="normal"))
+    
+    def _process_single_file_logic(self, file_path):
+        """Core logic for processing a single file (used by both modes)"""
+        # Step 1: Convert PDF to markdown
+        self.log("Step 1: Converting PDF to Markdown...")
+        result = self.markitdown.convert(file_path)
+        markdown_text = result.text_content
+        self.log(f"✓ PDF converted successfully ({len(markdown_text)} characters)")
+        
+        # Step 2: Apply semantic processing if enabled
+        if self.enable_semantic.get() and self.azure_configured and self.semantic_linker:
+            self.log("Step 2: Starting semantic processing...")
+            self.log("⏳ This includes chunking, embedding generation, and AI analysis")
+            
+            try:
+                markdown_text = self.semantic_linker.add_semantic_links(
+                    markdown_text,
+                    Path(file_path).name
+                )
+                self.log("✓ Semantic processing completed successfully")
+                
+            except Exception as e:
+                self.log(f"✗ Semantic processing failed: {e}")
+                self.log("⚠ Continuing with basic conversion...")
+        else:
+            self.log("Step 2: Skipping semantic processing (not enabled)")
+        
+        # Step 3: Save output file
+        self.log("Step 3: Writing output file...")
+        output_filename = Path(file_path).stem + ".md"
+        output_path = self.output_dir / output_filename
+        
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(markdown_text)
+        
+        # Verify file was written
+        if output_path.exists():
+            file_size = output_path.stat().st_size
+            self.log(f"✓ File written successfully: {output_path}")
+            self.log(f"  File size: {file_size:,} bytes")
+        else:
+            raise Exception("File was not created on disk!")
+        
+        # Step 4: Verify everything is complete
+        self.log("Step 4: Verifying completion...")
+        
+        # Ensure all file operations are flushed to disk
+        os.sync()
+        time.sleep(0.1)
+        
+        # Verify file still exists and is readable
+        if not (output_path.exists() and output_path.is_file()):
+            raise Exception("Output file verification failed!")
+        
+        self.log("✓ Output file verified on disk")
+        
+        # Check vector database if semantic was enabled
+        if self.enable_semantic.get() and self.azure_configured and self.semantic_linker:
+            if self.semantic_linker.collection:
+                item_count = self.semantic_linker.collection.count()
+                self.log(f"✓ Vector database populated with {item_count} chunks")
+        
+        return output_path
 
 
 def main():
