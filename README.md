@@ -11,8 +11,8 @@ Nerdbuntu is an Ubuntu-based solution that uses MarkItDown with Azure AI to inte
 - 🔗 **Semantic Backlinking**: Automatically creates semantic links between content
 - 💾 **Vector Database**: ChromaDB integration with Qdrant migration support
 - 🎨 **User-Friendly GUI**: Simple Tkinter interface with single file and bulk processing modes
-- 📦 **Bulk Directory Processing**: Process entire directories of PDFs at once (NEW!)
-- 🔄 **Qdrant Migration**: Export ChromaDB data to Qdrant for better performance (NEW!)
+- 📦 **Bulk Directory Processing**: Process entire directories of PDFs at once
+- 🔄 **Migration GUI**: Graphical tool for ChromaDB to Qdrant migration (NEW!)
 - 📦 **Automated Setup**: One-script installation with your Azure credentials
 - 🔍 **Key Concept Extraction**: AI-powered concept identification
 - 📊 **RAG-Ready Output**: Optimized for retrieval augmented generation
@@ -20,7 +20,16 @@ Nerdbuntu is an Ubuntu-based solution that uses MarkItDown with Azure AI to inte
 
 ## What's New 🎉
 
-### Version 2.0 Features
+### Version 2.1 Features
+
+**Migration GUI** 🆕
+- User-friendly graphical migration interface
+- Step-by-step export and import workflow
+- Real-time progress tracking and logging
+- Automatic verification and testing
+- Connection testing for Qdrant
+- Migration history tracking
+- See [MIGRATION_GUI_GUIDE.md](MIGRATION_GUI_GUIDE.md) for details
 
 **Bulk Processing Mode**
 - Process entire directories of PDFs
@@ -91,7 +100,7 @@ During setup, you'll be prompted to enter:
 4. Configure options (semantic processing, concept extraction)
 5. Click "Process PDF File"
 
-### Bulk Directory Processing (NEW!)
+### Bulk Directory Processing
 
 1. **Launch the GUI**
 2. Select "Bulk Directory - Process all PDFs in a directory" mode  
@@ -117,7 +126,29 @@ During setup, you'll be prompted to enter:
 
 For better performance and scalability, migrate from ChromaDB to Qdrant:
 
-### Quick Migration
+### Migration GUI (Recommended) 🎨
+
+The easiest way to migrate is using the new Migration GUI:
+
+```bash
+# Launch the Migration GUI
+chmod +x launch_migration_gui.sh
+./launch_migration_gui.sh
+```
+
+**Features:**
+- ✅ User-friendly graphical interface
+- ✅ Step-by-step workflow (Export → Import)
+- ✅ Real-time progress tracking
+- ✅ Automatic verification
+- ✅ Connection testing
+- ✅ History tracking
+
+**See GUI guide:** [MIGRATION_GUI_GUIDE.md](MIGRATION_GUI_GUIDE.md)
+
+### Command Line Migration
+
+For automation or advanced users:
 
 ```bash
 # 1. Export ChromaDB data
@@ -136,9 +167,10 @@ python import_to_qdrant.py --json-file exports/qdrant/TIMESTAMP/export.json
 - 30-40% less memory usage
 - Production-ready features
 
-**See full guide:** [CHROMADB_TO_QDRANT_MIGRATION.md](CHROMADB_TO_QDRANT_MIGRATION.md)
-
-**Quick reference:** [QDRANT_QUICK_REFERENCE.md](QDRANT_QUICK_REFERENCE.md)
+**Migration Guides:**
+- **[MIGRATION_GUI_GUIDE.md](MIGRATION_GUI_GUIDE.md)** - GUI user guide 🆕
+- **[CHROMADB_TO_QDRANT_MIGRATION.md](CHROMADB_TO_QDRANT_MIGRATION.md)** - Complete CLI migration guide
+- **[QDRANT_QUICK_REFERENCE.md](QDRANT_QUICK_REFERENCE.md)** - Quick commands and snippets
 
 ## Backup and Restore 💾
 
@@ -164,6 +196,7 @@ cd ~/nerdbuntu
 
 ### User Guides
 - **[QUICKSTART.md](QUICKSTART.md)** - Get started in 5 minutes
+- **[MIGRATION_GUI_GUIDE.md](MIGRATION_GUI_GUIDE.md)** - Migration GUI user guide 🆕
 - **[BULK_PROCESSING_GUIDE.md](BULK_PROCESSING_GUIDE.md)** - Bulk directory processing
 - **[BACKUP_GUIDE.md](BACKUP_GUIDE.md)** - Backup and restore operations
 - **[MULTI_DOCUMENT_GUIDE.md](MULTI_DOCUMENT_GUIDE.md)** - Working with multiple documents
@@ -206,24 +239,27 @@ EMBEDDING_MODEL=all-MiniLM-L6-v2
 ```
 ~/nerdbuntu/
 ├── gui/
-│   └── app.py                # GUI application (v2.0 with bulk processing)
+│   ├── app.py                    # Main GUI application
+│   └── migration_gui.py          # Migration GUI (NEW!)
 ├── core/
-│   ├── semantic_linker.py    # ChromaDB semantic linker
-│   └── semantic_linker_qdrant.py  # Qdrant semantic linker (NEW!)
-├── export_to_qdrant.py       # Qdrant export script (NEW!)
-├── import_to_qdrant.py       # Qdrant import script (NEW!)
-├── setup.sh                  # Setup script
-├── backup_restore.sh         # Backup and restore
-├── launch_gui.sh             # GUI launcher
-├── requirements.txt          # Python dependencies
-├── .env                      # Configuration
-├── venv/                     # Python virtual environment
-├── exports/                  # Backup and export archives
-│   └── qdrant/              # Qdrant exports (NEW!)
+│   ├── semantic_linker.py        # ChromaDB semantic linker
+│   └── semantic_linker_qdrant.py # Qdrant semantic linker
+├── export_to_qdrant.py           # Qdrant export script
+├── import_to_qdrant.py           # Qdrant import script
+├── launch_migration_gui.py       # Migration GUI launcher (NEW!)
+├── launch_migration_gui.sh       # Migration GUI shell launcher (NEW!)
+├── setup.sh                      # Setup script
+├── backup_restore.sh             # Backup and restore
+├── launch_gui.sh                 # Main GUI launcher
+├── requirements.txt              # Python dependencies
+├── .env                          # Configuration
+├── venv/                         # Python virtual environment
+├── exports/                      # Backup and export archives
+│   └── qdrant/                   # Qdrant exports
 └── data/
-    ├── input/               # Place PDFs here
-    ├── output/              # Processed markdown files
-    └── vector_db/           # ChromaDB storage
+    ├── input/                    # Place PDFs here
+    ├── output/                   # Processed markdown files
+    └── vector_db/                # ChromaDB storage
 ```
 
 ## Performance Comparison 📊
@@ -267,6 +303,15 @@ rm ~/nerdbuntu/data/output/*.md
 # Disable semantic processing for speed
 # Process smaller batches
 # Run overnight for large sets
+```
+
+**Issue**: Migration GUI won't start
+```bash
+# Install tkinter
+sudo apt-get install python3-tk
+
+# Or use CLI migration tools instead
+python export_to_qdrant.py
 ```
 
 **Issue**: Qdrant migration errors
@@ -335,8 +380,9 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 - [x] Export/Import functionality
 - [x] Backup and restore system
-- [x] Bulk processing UI ✅ **NEW!**
-- [x] Qdrant migration support ✅ **NEW!**
+- [x] Bulk processing UI ✅
+- [x] Qdrant migration support ✅
+- [x] Migration GUI ✅ **NEW!**
 - [ ] Web interface (Flask/FastAPI)
 - [ ] Additional file formats (DOCX, PPTX)
 - [ ] Custom embedding models
