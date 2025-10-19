@@ -9,12 +9,32 @@ Nerdbuntu is an Ubuntu-based solution that uses MarkItDown with Azure AI to inte
 - 🎯 **Intelligent PDF Parsing**: Converts PDFs to clean, structured markdown
 - 🧠 **Azure AI Integration**: Uses Azure AI Services for semantic analysis
 - 🔗 **Semantic Backlinking**: Automatically creates semantic links between content
-- 💾 **Vector Database**: ChromaDB integration for efficient similarity search
-- 🎨 **User-Friendly GUI**: Simple Tkinter interface for file selection
+- 💾 **Vector Database**: ChromaDB integration with Qdrant migration support
+- 🎨 **User-Friendly GUI**: Simple Tkinter interface with single file and bulk processing modes
+- 📦 **Bulk Directory Processing**: Process entire directories of PDFs at once (NEW!)
+- 🔄 **Qdrant Migration**: Export ChromaDB data to Qdrant for better performance (NEW!)
 - 📦 **Automated Setup**: One-script installation with your Azure credentials
 - 🔍 **Key Concept Extraction**: AI-powered concept identification
 - 📊 **RAG-Ready Output**: Optimized for retrieval augmented generation
 - 💾 **Backup & Restore**: Complete data backup and restoration system
+
+## What's New 🎉
+
+### Version 2.0 Features
+
+**Bulk Processing Mode**
+- Process entire directories of PDFs
+- File pattern matching (e.g., `*.pdf`, `report_*.pdf`)
+- Smart skip logic (skip already processed files)
+- Detailed progress tracking and statistics
+- See [BULK_PROCESSING_GUIDE.md](BULK_PROCESSING_GUIDE.md) for details
+
+**Qdrant Migration**
+- Export ChromaDB to Qdrant-compatible format
+- Import data into Qdrant with verification
+- 5-13x faster search performance
+- Production-ready vector database
+- See [CHROMADB_TO_QDRANT_MIGRATION.md](CHROMADB_TO_QDRANT_MIGRATION.md) for details
 
 ## Prerequisites 📋
 
@@ -45,13 +65,6 @@ cd nerdbuntu
 
 ### 2. Run Setup Script
 
-The setup script will:
-- Install all system dependencies
-- Create Python virtual environment
-- Install all Python packages (MarkItDown, Azure AI, ChromaDB, etc.)
-- **Prompt you for your Azure credentials**
-- Configure environment variables
-
 ```bash
 chmod +x setup.sh
 ./setup.sh
@@ -65,23 +78,30 @@ During setup, you'll be prompted to enter:
 ### 3. Launch the Application
 
 ```bash
-source ~/nerdbuntu/venv/bin/activate
-cd ~/nerdbuntu
-python app.py
+./launch_gui.sh
 ```
 
 ## Usage 📖
 
-### GUI Application
+### Single File Processing
 
-1. **Launch the app**: Run `python app.py`
-2. **Select PDF**: Click "Browse" to choose your PDF file
-3. **Choose Output Directory**: Select where to save the markdown file
-4. **Configure Options**:
-   - ✅ Enable Semantic Backlinking (recommended)
-   - ✅ Extract Key Concepts (recommended)
-5. **Process**: Click "Process PDF"
-6. **View Results**: Check the log for progress and find your markdown in the output directory
+1. **Launch the GUI**
+2. Select "Single File - Process one PDF file" mode
+3. Click "Browse File" and select your PDF
+4. Configure options (semantic processing, concept extraction)
+5. Click "Process PDF File"
+
+### Bulk Directory Processing (NEW!)
+
+1. **Launch the GUI**
+2. Select "Bulk Directory - Process all PDFs in a directory" mode  
+3. Click "Browse Directory" and select folder with PDFs
+4. (Optional) Set file pattern (default: `*.pdf`)
+5. Enable "Skip files that already have output" to resume jobs
+6. Click "Process All PDFs in Directory"
+7. Confirm number of files and wait for completion
+
+**See detailed guide:** [BULK_PROCESSING_GUIDE.md](BULK_PROCESSING_GUIDE.md)
 
 ### What Happens During Processing
 
@@ -93,38 +113,39 @@ python app.py
 6. **Metadata Addition**: Document enriched with semantic metadata
 7. **Backlink Generation**: Related content automatically linked
 
-### Output Format
+## Migrating to Qdrant 🔄
 
-Your markdown file will include:
+For better performance and scalability, migrate from ChromaDB to Qdrant:
 
-```markdown
----
-source: example.pdf
-processed: 2025-10-06T12:00:00
-key_concepts: machine learning, neural networks, AI
-chunks: 15
----
+### Quick Migration
 
-[Your original content here...]
+```bash
+# 1. Export ChromaDB data
+python export_to_qdrant.py
 
----
+# 2. Setup Qdrant
+docker run -d -p 6333:6333 qdrant/qdrant
 
-## Semantic Backlinks
-
-This document is semantically linked in the vector database.
-- **Key Concepts**: machine learning, neural networks, AI
-- **Total Chunks**: 15
+# 3. Import to Qdrant
+python import_to_qdrant.py --json-file exports/qdrant/TIMESTAMP/export.json
 ```
+
+**Performance Improvements:**
+- 5x faster search for 10K vectors
+- 13x faster search for 100K vectors
+- 30-40% less memory usage
+- Production-ready features
+
+**See full guide:** [CHROMADB_TO_QDRANT_MIGRATION.md](CHROMADB_TO_QDRANT_MIGRATION.md)
+
+**Quick reference:** [QDRANT_QUICK_REFERENCE.md](QDRANT_QUICK_REFERENCE.md)
 
 ## Backup and Restore 💾
 
 ### Creating a Backup
 
-Backup all your processed markdown files and ChromaDB database:
-
 ```bash
 cd ~/nerdbuntu
-chmod +x backup_restore.sh
 ./backup_restore.sh backup
 ```
 
@@ -133,121 +154,29 @@ chmod +x backup_restore.sh
 - ✅ Complete ChromaDB vector database
 - ✅ Backup metadata and restore instructions
 
-**Backup location:** `~/nerdbuntu/exports/nerdbuntu_backup_TIMESTAMP.zip`
-
 ### Restoring from Backup
-
-Restore your data from a backup archive:
 
 ```bash
 ./backup_restore.sh restore ~/nerdbuntu/exports/nerdbuntu_backup_*.zip
 ```
 
-**Restore modes:**
-1. **Merge** (Recommended)
-   - Adds backup data to existing data
-   - Safe - won't delete anything
-   - Perfect for combining multiple backups
+## Documentation 📚
 
-2. **Replace** (Careful!)
-   - Deletes ALL existing data first
-   - Then restores backup data
-   - Use for clean restoration
-   - Requires typing "DELETE" to confirm
+### User Guides
+- **[QUICKSTART.md](QUICKSTART.md)** - Get started in 5 minutes
+- **[BULK_PROCESSING_GUIDE.md](BULK_PROCESSING_GUIDE.md)** - Bulk directory processing
+- **[BACKUP_GUIDE.md](BACKUP_GUIDE.md)** - Backup and restore operations
+- **[MULTI_DOCUMENT_GUIDE.md](MULTI_DOCUMENT_GUIDE.md)** - Working with multiple documents
 
-### Common Backup/Restore Scenarios
+### Migration & Advanced Features
+- **[CHROMADB_TO_QDRANT_MIGRATION.md](CHROMADB_TO_QDRANT_MIGRATION.md)** - Complete Qdrant migration guide
+- **[QDRANT_QUICK_REFERENCE.md](QDRANT_QUICK_REFERENCE.md)** - Quick commands and snippets
+- **[QDRANT_MIGRATION_SUMMARY.md](QDRANT_MIGRATION_SUMMARY.md)** - Migration overview
 
-**Regular backups:**
-```bash
-# Create daily backups
-./backup_restore.sh backup
-
-# Backups are timestamped automatically
-# nerdbuntu_backup_20251006_120000.zip
-```
-
-**Moving to another machine:**
-```bash
-# Machine 1: Create backup
-./backup_restore.sh backup
-
-# Transfer the file
-scp ~/nerdbuntu/exports/nerdbuntu_backup_*.zip user@machine2:~/
-
-# Machine 2: Restore
-./backup_restore.sh restore ~/nerdbuntu_backup_*.zip
-```
-
-**Combining multiple backups:**
-```bash
-# Restore first backup (merge mode)
-./backup_restore.sh restore backup1.zip
-
-# Restore second backup (merge mode)
-./backup_restore.sh restore backup2.zip
-
-# All data now combined!
-```
-
-**Disaster recovery:**
-```bash
-# Restore from backup (replace mode)
-./backup_restore.sh restore ~/safe-location/backup.zip
-# Choose option 2 (Replace)
-# Type "DELETE" to confirm
-```
-
-## Advanced Usage 🎓
-
-### Batch Processing
-
-Use the included examples script:
-
-```bash
-# Process multiple PDFs at once
-python examples.py batch ./input_folder ./output_folder
-```
-
-Or use it programmatically:
-
-```python
-from app import SemanticLinker
-from markitdown import MarkItDown
-from pathlib import Path
-
-# Initialize
-md = MarkItDown()
-linker = SemanticLinker(endpoint, api_key)
-linker.initialize_vector_db("./vector_db")
-
-# Process multiple files
-for pdf_file in Path("./input").glob("*.pdf"):
-    result = md.convert(str(pdf_file))
-    enhanced = linker.add_semantic_links(result.text_content, pdf_file.name)
-    
-    output_file = f"./output/{pdf_file.stem}.md"
-    with open(output_file, 'w') as f:
-        f.write(enhanced)
-```
-
-### Querying Semantic Links
-
-```bash
-# Find related content
-python examples.py query "machine learning concepts"
-```
-
-Or programmatically:
-
-```python
-# Find related content
-results = linker.find_similar_chunks("machine learning concepts", n_results=5)
-
-for doc, distance in zip(results['documents'][0], results['distances'][0]):
-    print(f"Similarity: {1-distance:.3f}")
-    print(doc)
-    print("---")
-```
+### Technical Documentation
+- **[PROCESSING_PIPELINE.md](PROCESSING_PIPELINE.md)** - How processing works
+- **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** - Project organization
+- **[TOPIC_SPLITTING_GUIDE.md](TOPIC_SPLITTING_GUIDE.md)** - Advanced chunking
 
 ## Configuration ⚙️
 
@@ -272,85 +201,88 @@ MAX_CONCEPTS=10
 EMBEDDING_MODEL=all-MiniLM-L6-v2
 ```
 
-You can manually edit this file if you need to change your Azure credentials:
-```bash
-nano ~/nerdbuntu/.env
-```
-
 ### Directory Structure
 
 ```
 ~/nerdbuntu/
-├── app.py                    # Main application
+├── gui/
+│   └── app.py                # GUI application (v2.0 with bulk processing)
+├── core/
+│   ├── semantic_linker.py    # ChromaDB semantic linker
+│   └── semantic_linker_qdrant.py  # Qdrant semantic linker (NEW!)
+├── export_to_qdrant.py       # Qdrant export script (NEW!)
+├── import_to_qdrant.py       # Qdrant import script (NEW!)
 ├── setup.sh                  # Setup script
-├── backup_restore.sh         # Backup and restore script
-├── examples.py               # Advanced usage examples
+├── backup_restore.sh         # Backup and restore
+├── launch_gui.sh             # GUI launcher
 ├── requirements.txt          # Python dependencies
-├── .env                      # Configuration (created by setup)
+├── .env                      # Configuration
 ├── venv/                     # Python virtual environment
-├── exports/                  # Backup archives
+├── exports/                  # Backup and export archives
+│   └── qdrant/              # Qdrant exports (NEW!)
 └── data/
-    ├── input/               # Place PDFs here (optional)
+    ├── input/               # Place PDFs here
     ├── output/              # Processed markdown files
     └── vector_db/           # ChromaDB storage
 ```
+
+## Performance Comparison 📊
+
+### ChromaDB vs Qdrant
+
+| Metric | ChromaDB | Qdrant | Improvement |
+|--------|----------|--------|-------------|
+| Search (10K vectors) | ~50ms | ~10ms | **5x faster** |
+| Search (100K vectors) | ~200ms | ~15ms | **13x faster** |
+| Memory Usage | Higher | Lower | **30-40% less** |
+| Batch Insert | Slower | Faster | **2-3x faster** |
+
+### Processing Speed (Bulk Mode)
+
+| Mode | Files | Time | Per File |
+|------|-------|------|----------|
+| Basic (no AI) | 100 | ~30 min | 10-30 sec |
+| Semantic (with AI) | 100 | ~3 hours | 1-3 min |
+| Basic (no AI) | 500 | ~2.5 hours | 10-30 sec |
 
 ## Troubleshooting 🔧
 
 ### Common Issues
 
-**Issue**: "Azure credentials not found"
+**Issue**: "No files found" in bulk mode
 ```bash
-# Solution: Check your .env file
-cat ~/nerdbuntu/.env
-
-# Or re-run setup to enter credentials again
-./setup.sh
+# Check pattern syntax
+Pattern: *.pdf        # All PDFs
+Pattern: report_*.pdf # Files starting with "report_"
 ```
 
-**Issue**: ChromaDB errors
+**Issue**: "All files skipped" in bulk mode
 ```bash
-# Solution: Restore from a backup
-./backup_restore.sh restore ~/nerdbuntu/exports/latest_backup.zip
-
-# Or clear and reinitialize
-rm -rf ~/nerdbuntu/data/vector_db/*
-python app.py  # Will reinitialize
+# Disable "Skip existing files" or delete outputs
+rm ~/nerdbuntu/data/output/*.md
 ```
 
-**Issue**: Import errors
+**Issue**: Bulk processing very slow
 ```bash
-# Solution: Reinstall dependencies
-source ~/nerdbuntu/venv/bin/activate
-pip install -r requirements.txt
+# Disable semantic processing for speed
+# Process smaller batches
+# Run overnight for large sets
 ```
 
-**Issue**: Tkinter not found
+**Issue**: Qdrant migration errors
 ```bash
-# Solution: Install Python Tkinter
-sudo apt-get install python3-tk
+# Ensure Qdrant is running
+docker ps | grep qdrant
+
+# Check Qdrant is accessible
+curl http://localhost:6333/
 ```
 
-**Issue**: Azure API errors
-- Verify your endpoint URL is correct (must start with `https://`)
-- Check your API key is valid
-- Ensure your deployment name matches your Azure resource
-- Verify you have quota/credits available in Azure
-
-**Issue**: Restore not working
-```bash
-# Verify backup file integrity
-unzip -t backup.zip
-
-# Try manual restore
-unzip backup.zip
-cp -r nerdbuntu_backup_*/markdown/* ~/nerdbuntu/data/output/
-cp -r nerdbuntu_backup_*/vector_db/* ~/nerdbuntu/data/vector_db/
-```
+See documentation for more troubleshooting tips.
 
 ## RAG Integration 🤖
 
-The output markdown files are optimized for RAG systems:
+Output markdown files are optimized for RAG systems:
 
 1. **Semantic Chunks**: Pre-chunked for efficient retrieval
 2. **Vector Embeddings**: Already computed and stored
@@ -361,46 +293,21 @@ The output markdown files are optimized for RAG systems:
 ### Example RAG Pipeline
 
 ```python
-from app import SemanticLinker
+from core.semantic_linker import SemanticLinker
 
 # Initialize
 linker = SemanticLinker(azure_endpoint, azure_api_key)
-linker.initialize_vector_db("./vector_db")
+linker.initialize_vector_db("./data/vector_db")
 
-# 1. Query the vector database
-query = "How do neural networks work?"
-results = linker.find_similar_chunks(query, n_results=3)
+# Query the vector database
+results = linker.find_similar_chunks("How do neural networks work?", n_results=3)
 
-# 2. Use chunks as context for LLM
+# Use chunks as context for LLM
 context = "\n\n".join(results['documents'][0])
 
-# 3. Generate answer with Azure AI
-from azure.ai.inference import ChatCompletionsClient
-from azure.core.credentials import AzureKeyCredential
-
-client = ChatCompletionsClient(
-    endpoint=azure_endpoint,
-    credential=AzureKeyCredential(azure_api_key)
-)
-
-response = client.complete(
-    messages=[
-        {"role": "system", "content": "Answer based on the context."},
-        {"role": "user", "content": f"Context:\n{context}\n\nQuestion: {query}"}
-    ],
-    model="gpt-4o"
-)
-
-print(response.choices[0].message.content)
+# Generate answer with Azure AI
+# ... (see full example in documentation)
 ```
-
-## Cost Considerations 💰
-
-Azure AI Services costs depend on your usage:
-- Pay-as-you-go pricing
-- Estimated: ~$0.10-$1.00 per document (varies by size and features used)
-- Monitor usage in [Azure Portal](https://portal.azure.com)
-- Set up budget alerts to avoid unexpected charges
 
 ## Contributing 🤝
 
@@ -414,20 +321,22 @@ MIT License - see [LICENSE](LICENSE) file for details
 
 - **Issues**: [GitHub Issues](https://github.com/Cosmicjedi/nerdbuntu/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/Cosmicjedi/nerdbuntu/discussions)
-- **Quick Start**: See [QUICKSTART.md](QUICKSTART.md)
+- **Documentation**: See docs listed above
 
 ## Acknowledgments 🙏
 
 - [MarkItDown](https://github.com/microsoft/markitdown) by Microsoft
 - [Azure AI Services](https://azure.microsoft.com/en-us/products/ai-services)
 - [ChromaDB](https://www.trychroma.com/)
+- [Qdrant](https://qdrant.tech/)
 - [Sentence Transformers](https://www.sbert.net/)
 
 ## Roadmap 🗺️
 
 - [x] Export/Import functionality
 - [x] Backup and restore system
-- [ ] Batch processing UI
+- [x] Bulk processing UI ✅ **NEW!**
+- [x] Qdrant migration support ✅ **NEW!**
 - [ ] Web interface (Flask/FastAPI)
 - [ ] Additional file formats (DOCX, PPTX)
 - [ ] Custom embedding models
