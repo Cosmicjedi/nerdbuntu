@@ -311,11 +311,8 @@ class MigrationGUI:
                 
                 if self.is_url(location):
                     self.log("  Type: Server URL", self.export_log)
-                    url_clean = location.replace('http://', '').replace('https://', '')
-                    parts = url_clean.split(':')
-                    host = parts[0]
-                    port = int(parts[1]) if len(parts) > 1 else 8000
-                    client = chromadb.HttpClient(host=host, port=port)
+                    # Fixed: Pass full URL directly to HttpClient
+                    client = chromadb.HttpClient(host=location)
                 else:
                     self.log("  Type: File Path", self.export_log)
                     if not Path(location).exists():
@@ -387,11 +384,8 @@ class MigrationGUI:
         
         if self.is_url(location):
             self.log("  Type: HTTP Server", self.export_log)
-            url_clean = location.replace('http://', '').replace('https://', '')
-            parts = url_clean.split(':')
-            host = parts[0]
-            port = int(parts[1]) if len(parts) > 1 else 8000
-            client = chromadb.HttpClient(host=host, port=port)
+            # Fixed: Pass full URL directly to HttpClient
+            client = chromadb.HttpClient(host=location)
         else:
             self.log("  Type: File-based", self.export_log)
             client = chromadb.PersistentClient(path=location)
