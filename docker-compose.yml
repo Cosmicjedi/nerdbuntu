@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: chromadb-server
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount your local ChromaDB data directory to the container
+      # This preserves your existing data and makes it accessible via HTTP
+      - ./data/vector_db:/chroma/chroma
+    environment:
+      # Enable persistent storage
+      - IS_PERSISTENT=TRUE
+      # Disable anonymous telemetry
+      - ANONYMIZED_TELEMETRY=FALSE
+      # Optional: Set authentication (uncomment and set a token if needed)
+      # - CHROMA_SERVER_AUTH_CREDENTIALS=your-secret-token
+      # - CHROMA_SERVER_AUTH_PROVIDER=chromadb.auth.token.TokenAuthServerProvider
+    restart: unless-stopped
+    networks:
+      - nerdbuntu-network
+
+  # Optional: Qdrant service for Server 2
+  # Uncomment this section if running both databases on same server
+  # qdrant:
+  #   image: qdrant/qdrant:latest
+  #   container_name: qdrant-server
+  #   ports:
+  #     - "6333:6333"
+  #     - "6334:6334"  # gRPC port
+  #   volumes:
+  #     - ./data/qdrant_storage:/qdrant/storage
+  #   environment:
+  #     - QDRANT__SERVICE__GRPC_PORT=6334
+  #   restart: unless-stopped
+  #   networks:
+  #     - nerdbuntu-network
+
+networks:
+  nerdbuntu-network:
+    driver: bridge
